@@ -2,8 +2,8 @@
 //!
 //! Handles loading and saving project configuration and workspace layouts.
 
-#[allow(dead_code)]
 mod project;
+mod workspace;
 
-#[allow(unused_imports)]
 pub use project::*;
+pub use workspace::*;
