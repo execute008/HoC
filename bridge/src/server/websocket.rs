@@ -12,7 +12,7 @@ use tokio::sync::broadcast;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
-use super::protocol::{ClientMessage, ServerMessage, PROTOCOL_VERSION};
+use super::protocol::{ClientMessage, ErrorCode, ServerMessage};
 use crate::agent::AgentManager;
 
 /// Configuration for the WebSocket server
@@ -142,9 +142,7 @@ async fn handle_connection(
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
     // Send welcome message
-    let welcome = ServerMessage::Welcome {
-        version: PROTOCOL_VERSION,
-    };
+    let welcome = ServerMessage::welcome();
     let welcome_json = serde_json::to_string(&welcome)?;
     ws_sender.send(Message::Text(welcome_json)).await?;
     debug!("Sent welcome message to {}", peer_addr);
@@ -164,10 +162,10 @@ async fn handle_connection(
                                 ws_sender.send(Message::Text(response_json)).await?;
                             }
                             Err(e) => {
-                                let error_msg = ServerMessage::Error {
-                                    message: e.to_string(),
-                                    agent_id: None,
-                                };
+                                let error_msg = ServerMessage::error_with_code(
+                                    e.to_string(),
+                                    ErrorCode::InternalError,
+                                );
                                 let error_json = serde_json::to_string(&error_msg)?;
                                 ws_sender.send(Message::Text(error_json)).await?;
                             }
@@ -227,32 +225,35 @@ async fn handle_message(
         ClientMessage::SpawnAgent {
             project_path,
             preset,
+            ..
         } => {
             debug!(
                 "SpawnAgent request: project={}, preset={:?}",
                 project_path, preset
             );
             // Agent spawning will be implemented in US-RBS-004/005
-            Ok(ServerMessage::Error {
-                message: "Agent spawning not yet implemented".to_string(),
-                agent_id: None,
-            })
+            Ok(ServerMessage::error_with_code(
+                "Agent spawning not yet implemented",
+                ErrorCode::InternalError,
+            ))
         }
         ClientMessage::AgentInput { agent_id, input } => {
             debug!("AgentInput request: agent={}, input_len={}", agent_id, input.len());
             // Agent input handling will be implemented in US-RBS-004/005
-            Ok(ServerMessage::Error {
-                message: "Agent input not yet implemented".to_string(),
-                agent_id: Some(agent_id),
-            })
+            Ok(ServerMessage::agent_error(
+                agent_id,
+                "Agent input not yet implemented",
+                ErrorCode::InternalError,
+            ))
         }
-        ClientMessage::KillAgent { agent_id } => {
+        ClientMessage::KillAgent { agent_id, .. } => {
             debug!("KillAgent request: agent={}", agent_id);
             // Agent killing will be implemented in US-RBS-004/005
-            Ok(ServerMessage::Error {
-                message: "Agent killing not yet implemented".to_string(),
-                agent_id: Some(agent_id),
-            })
+            Ok(ServerMessage::agent_error(
+                agent_id,
+                "Agent killing not yet implemented",
+                ErrorCode::InternalError,
+            ))
         }
         ClientMessage::ResizeTerminal {
             agent_id,
@@ -264,10 +265,25 @@ async fn handle_message(
                 agent_id, cols, rows
             );
             // Terminal resizing will be implemented in US-RBS-004/005
-            Ok(ServerMessage::Error {
-                message: "Terminal resizing not yet implemented".to_string(),
-                agent_id: Some(agent_id),
-            })
+            Ok(ServerMessage::agent_error(
+                agent_id,
+                "Terminal resizing not yet implemented",
+                ErrorCode::InternalError,
+            ))
+        }
+        ClientMessage::ListAgents => {
+            debug!("ListAgents request");
+            // Agent listing will be implemented in US-RBS-004/005
+            Ok(ServerMessage::AgentList { agents: vec![] })
+        }
+        ClientMessage::GetAgentStatus { agent_id } => {
+            debug!("GetAgentStatus request: agent={}", agent_id);
+            // Agent status will be implemented in US-RBS-004/005
+            Ok(ServerMessage::agent_error(
+                agent_id,
+                "Agent status not yet implemented",
+                ErrorCode::AgentNotFound,
+            ))
         }
     }
 }
