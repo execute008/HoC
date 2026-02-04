@@ -8,9 +8,14 @@ mod config;
 mod git;
 mod server;
 
+use std::sync::Arc;
+
 use clap::Parser;
+use tokio::signal;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
+
+use server::{ServerConfig, WebSocketServer};
 
 /// Halls of Creation Bridge Server
 ///
@@ -57,14 +62,57 @@ async fn main() -> anyhow::Result<()> {
         "Halls of Creation Bridge v{}",
         env!("CARGO_PKG_VERSION")
     );
-    info!("Listening on {}:{}", args.bind, args.port);
 
     if args.token.is_some() {
         info!("Token authentication enabled");
     }
 
-    // Server will be implemented in US-RBS-002
-    info!("Bridge server initialized (WebSocket server pending US-RBS-002)");
+    // Create server configuration
+    let config = ServerConfig::new(args.bind, args.port).with_token(args.token);
 
+    // Create and start the WebSocket server
+    let server = Arc::new(WebSocketServer::new(config));
+    let server_handle = Arc::clone(&server);
+
+    // Spawn shutdown signal handler
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        info!("Initiating graceful shutdown...");
+        server_handle.shutdown();
+    });
+
+    // Run the server
+    server.run().await?;
+
+    info!("Server shutdown complete");
     Ok(())
+}
+
+/// Wait for shutdown signal (SIGTERM or SIGINT)
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {
+            info!("Received SIGINT (Ctrl+C)");
+        }
+        _ = terminate => {
+            info!("Received SIGTERM");
+        }
+    }
 }

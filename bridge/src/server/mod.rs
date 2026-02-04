@@ -5,10 +5,9 @@
 
 #[allow(dead_code)]
 mod handler;
-#[allow(dead_code)]
 mod protocol;
+mod websocket;
 
 #[allow(unused_imports)]
-pub use handler::*;
-#[allow(unused_imports)]
-pub use protocol::*;
+pub use protocol::{ClientMessage, ServerMessage, PROTOCOL_VERSION};
+pub use websocket::{ServerConfig, WebSocketServer};
