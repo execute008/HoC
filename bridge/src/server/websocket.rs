@@ -137,7 +137,7 @@ async fn handle_connection(
     peer_addr: SocketAddr,
     agent_manager: Arc<AgentManager>,
     mut shutdown_rx: broadcast::Receiver<()>,
-    _token: Option<String>,
+    token: Option<String>,
 ) -> anyhow::Result<()> {
     use crate::agent::AgentEvent;
 
@@ -147,11 +147,53 @@ async fn handle_connection(
     let ws_stream = accept_async(stream).await?;
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
-    // Send welcome message
-    let welcome = ServerMessage::welcome();
+    // Send welcome message, indicating if auth is required
+    let welcome = if token.is_some() {
+        ServerMessage::welcome_auth_required()
+    } else {
+        ServerMessage::welcome()
+    };
     let welcome_json = serde_json::to_string(&welcome)?;
     ws_sender.send(Message::Text(welcome_json)).await?;
     debug!("Sent welcome message to {}", peer_addr);
+
+    // Handle authentication if token is required
+    if let Some(ref expected_token) = token {
+        debug!("Waiting for authentication from {}", peer_addr);
+
+        // Wait for the first message which should be authentication
+        let auth_result = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            wait_for_auth(&mut ws_receiver, expected_token),
+        )
+        .await;
+
+        match auth_result {
+            Ok(Ok(())) => {
+                info!("Client {} authenticated successfully", peer_addr);
+                let success = ServerMessage::auth_success();
+                let success_json = serde_json::to_string(&success)?;
+                ws_sender.send(Message::Text(success_json)).await?;
+            }
+            Ok(Err(e)) => {
+                warn!("Authentication failed for {}: {}", peer_addr, e);
+                let error = ServerMessage::error_with_code(e.to_string(), ErrorCode::AuthFailed);
+                let error_json = serde_json::to_string(&error)?;
+                ws_sender.send(Message::Text(error_json)).await?;
+                let _ = ws_sender.send(Message::Close(None)).await;
+                return Ok(());
+            }
+            Err(_) => {
+                warn!("Authentication timeout for {}", peer_addr);
+                let error =
+                    ServerMessage::error_with_code("Authentication timeout", ErrorCode::AuthFailed);
+                let error_json = serde_json::to_string(&error)?;
+                ws_sender.send(Message::Text(error_json)).await?;
+                let _ = ws_sender.send(Message::Close(None)).await;
+                return Ok(());
+            }
+        }
+    }
 
     // Subscribe to agent events
     let mut agent_event_rx = agent_manager.subscribe();
@@ -259,6 +301,15 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
     let message: ClientMessage = serde_json::from_str(text)?;
 
     match message {
+        ClientMessage::Authenticate { .. } => {
+            // Authentication message received after connection is established
+            // This shouldn't happen in normal flow - auth is handled during connection setup
+            warn!("Received unexpected Authenticate message after connection established");
+            Ok(ServerMessage::error_with_code(
+                "Already authenticated",
+                ErrorCode::InvalidMessage,
+            ))
+        }
         ClientMessage::Ping { seq } => {
             debug!("Received ping with seq {}", seq);
             Ok(ServerMessage::Pong { seq })
@@ -420,6 +471,52 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
             }
         }
     }
+}
+
+/// Wait for an authentication message from the client
+async fn wait_for_auth(
+    ws_receiver: &mut futures_util::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<TcpStream>,
+    >,
+    expected_token: &str,
+) -> anyhow::Result<()> {
+    use anyhow::anyhow;
+
+    while let Some(msg) = ws_receiver.next().await {
+        match msg {
+            Ok(Message::Text(text)) => {
+                let message: ClientMessage = serde_json::from_str(&text)?;
+                match message {
+                    ClientMessage::Authenticate { token } => {
+                        if token == expected_token {
+                            return Ok(());
+                        } else {
+                            return Err(anyhow!("Invalid authentication token"));
+                        }
+                    }
+                    _ => {
+                        return Err(anyhow!("Authentication required before other messages"));
+                    }
+                }
+            }
+            Ok(Message::Ping(data)) => {
+                // Pings are OK during auth wait, but we can't respond here
+                // Just continue waiting
+                debug!("Received ping during auth wait: {:?}", data);
+            }
+            Ok(Message::Close(_)) => {
+                return Err(anyhow!("Connection closed during authentication"));
+            }
+            Err(e) => {
+                return Err(anyhow!("WebSocket error during authentication: {}", e));
+            }
+            _ => {
+                // Ignore other message types during auth
+            }
+        }
+    }
+
+    Err(anyhow!("Connection closed before authentication"))
 }
 
 #[cfg(test)]

@@ -145,6 +145,12 @@ impl ServerEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
+    /// Authentication message - must be sent first when token is required
+    Authenticate {
+        /// The authentication token
+        token: String,
+    },
+
     /// Connection keepalive ping
     Ping {
         /// Sequence number for tracking round-trip time
@@ -207,6 +213,15 @@ impl ClientMessage {
     /// Validate message contents
     pub fn validate(&self) -> ProtocolResult<()> {
         match self {
+            ClientMessage::Authenticate { token } => {
+                if token.is_empty() {
+                    return Err(ProtocolError::ValidationError(
+                        "token cannot be empty".to_string(),
+                    ));
+                }
+                Ok(())
+            }
+
             ClientMessage::Ping { .. } => Ok(()),
 
             ClientMessage::SpawnAgent {
@@ -378,7 +393,13 @@ pub enum ServerMessage {
         /// Server identifier/name
         #[serde(skip_serializing_if = "Option::is_none")]
         server_id: Option<String>,
+        /// Whether authentication is required
+        #[serde(skip_serializing_if = "Option::is_none")]
+        auth_required: Option<bool>,
     },
+
+    /// Authentication successful
+    AuthSuccess,
 
     /// Response to Ping
     Pong {
@@ -520,6 +541,16 @@ impl ServerMessage {
         ServerMessage::Welcome {
             version: PROTOCOL_VERSION,
             server_id: None,
+            auth_required: None,
+        }
+    }
+
+    /// Create a Welcome message indicating auth is required
+    pub fn welcome_auth_required() -> Self {
+        ServerMessage::Welcome {
+            version: PROTOCOL_VERSION,
+            server_id: None,
+            auth_required: Some(true),
         }
     }
 
@@ -528,7 +559,13 @@ impl ServerMessage {
         ServerMessage::Welcome {
             version: PROTOCOL_VERSION,
             server_id: Some(server_id.into()),
+            auth_required: None,
         }
+    }
+
+    /// Create an AuthSuccess message
+    pub fn auth_success() -> Self {
+        ServerMessage::AuthSuccess
     }
 
     /// Create a Pong message

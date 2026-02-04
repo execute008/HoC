@@ -68,6 +68,12 @@ signal agent_status_received(agent_id: String, status: String, project_path: Str
 ## Emitted when server error is received
 signal error_received(message: String, code: String, agent_id: String)
 
+## Emitted when authentication succeeds
+signal auth_success()
+
+## Emitted when authentication fails
+signal auth_failed(message: String)
+
 
 # =============================================================================
 # State
@@ -103,6 +109,15 @@ var _ping_seq: int = 0
 ## Last pong sequence received
 var _last_pong_seq: int = 0
 
+## Authentication token
+var _auth_token: String = ""
+
+## Whether authentication is required by the server
+var _auth_required: bool = false
+
+## Whether authentication is complete
+var _authenticated: bool = false
+
 
 ## Connection states
 enum State {
@@ -131,6 +146,36 @@ func _ready() -> void:
 	_ping_timer.wait_time = PING_INTERVAL
 	_ping_timer.timeout.connect(_on_ping_timer_timeout)
 	add_child(_ping_timer)
+
+	# Auto-connect after bridge is started
+	_setup_auto_connect()
+
+
+func _setup_auto_connect() -> void:
+	# Wait a frame for other autoloads to initialize
+	await get_tree().process_frame
+
+	var bridge_launcher := get_node_or_null("/root/BridgeLauncher")
+	if bridge_launcher:
+		# Get token from launcher (which got it from ProjectConfig)
+		var token: String = bridge_launcher.get_bridge_token()
+		var port: int = bridge_launcher.get_bridge_port()
+
+		# Connect to bridge started signal or connect now if already running
+		if bridge_launcher.is_bridge_running():
+			_delayed_connect(port, token)
+		else:
+			bridge_launcher.bridge_started.connect(func(_pid): _delayed_connect(port, token))
+	else:
+		push_warning("BridgeClient: BridgeLauncher not found, manual connection required")
+
+
+func _delayed_connect(port: int, token: String) -> void:
+	# Brief delay to ensure bridge is ready to accept connections
+	await get_tree().create_timer(0.5).timeout
+	var err := connect_to_localhost(port, token)
+	if err != OK:
+		push_error("BridgeClient: Auto-connect failed: %s" % error_string(err))
 
 
 func _process(_delta: float) -> void:
@@ -162,12 +207,15 @@ func _process(_delta: float) -> void:
 
 ## Connect to the bridge at the given URL
 ## Returns OK on success, or an error code
-func connect_to_bridge(url: String) -> Error:
+func connect_to_bridge(url: String, token: String = "") -> Error:
 	if _state == State.CONNECTED or _state == State.CONNECTING:
 		push_warning("BridgeClient: Already connected or connecting")
 		return ERR_ALREADY_IN_USE
 
 	_url = url
+	_auth_token = token
+	_authenticated = false
+	_auth_required = false
 	_reconnect_attempt = 0
 	_reconnect_delay = DEFAULT_RECONNECT_DELAY
 
@@ -175,8 +223,8 @@ func connect_to_bridge(url: String) -> Error:
 
 
 ## Connect to localhost bridge on given port
-func connect_to_localhost(port: int = 9000) -> Error:
-	return connect_to_bridge("ws://127.0.0.1:%d" % port)
+func connect_to_localhost(port: int = 9000, token: String = "") -> Error:
+	return connect_to_bridge("ws://127.0.0.1:%d" % port, token)
 
 
 ## Disconnect from the bridge
@@ -211,6 +259,16 @@ func set_auto_reconnect(enabled: bool) -> void:
 ## Check if auto-reconnect is enabled
 func is_auto_reconnect_enabled() -> bool:
 	return _auto_reconnect
+
+
+## Check if authenticated with the bridge
+func is_authenticated() -> bool:
+	return _authenticated or not _auth_required
+
+
+## Set the authentication token (for reconnections)
+func set_auth_token(token: String) -> void:
+	_auth_token = token
 
 
 # =============================================================================
@@ -400,7 +458,26 @@ func _dispatch_message(msg_type: String, data: Dictionary) -> void:
 		"welcome":
 			var version: int = data.get("version", 0)
 			var server_id: String = data.get("server_id", "")
+			_auth_required = data.get("auth_required", false)
+
+			if _auth_required:
+				if _auth_token != "":
+					# Send authentication
+					_send_auth()
+				else:
+					push_error("BridgeClient: Server requires authentication but no token provided")
+					auth_failed.emit("No authentication token available")
+					disconnect_from_bridge()
+					return
+			else:
+				_authenticated = true
+
 			welcome_received.emit(version, server_id)
+
+		"auth_success":
+			_authenticated = true
+			print("BridgeClient: Authentication successful")
+			auth_success.emit()
 
 		"pong":
 			var seq: int = data.get("seq", 0)
@@ -448,15 +525,42 @@ func _dispatch_message(msg_type: String, data: Dictionary) -> void:
 			var code: String = data.get("code", "")
 			var agent_id: String = data.get("agent_id", "")
 			push_warning("BridgeClient: Server error: %s (code: %s)" % [message, code])
+
+			# Handle auth failure specially
+			if code == "auth_failed":
+				_authenticated = false
+				auth_failed.emit(message)
+
 			error_received.emit(message, code, agent_id)
 
 		_:
 			push_warning("BridgeClient: Unknown message type: %s" % msg_type)
 
 
+func _send_auth() -> Error:
+	# Send authentication message - bypasses the auth check
+	return _send_message_internal({
+		"type": "authenticate",
+		"token": _auth_token
+	})
+
+
 func _send_message(data: Dictionary) -> Error:
 	if _state != State.CONNECTED:
 		push_error("BridgeClient: Cannot send message - not connected")
+		return ERR_CONNECTION_ERROR
+
+	# Block messages if auth is required but not complete
+	if _auth_required and not _authenticated:
+		push_error("BridgeClient: Cannot send message - authentication required")
+		return ERR_UNAUTHORIZED
+
+	return _send_message_internal(data)
+
+
+func _send_message_internal(data: Dictionary) -> Error:
+	if _socket == null:
+		push_error("BridgeClient: Socket is null")
 		return ERR_CONNECTION_ERROR
 
 	# Add protocol version

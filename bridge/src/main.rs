@@ -61,8 +61,11 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Halls of Creation Bridge v{}", env!("CARGO_PKG_VERSION"));
 
-    if args.token.is_some() {
+    if let Some(ref token) = args.token {
         info!("Token authentication enabled");
+        info!("===========================================");
+        info!("AUTH TOKEN: {}", token);
+        info!("===========================================");
     }
 
     // Create server configuration

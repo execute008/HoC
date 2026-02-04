@@ -28,6 +28,9 @@ const MAX_RECENT_PROJECTS := 10
 ## Config file path for persisting recent projects
 const CONFIG_FILE_PATH := "user://project_config.json"
 
+## Key for storing bridge auth token (stored separately for security)
+const BRIDGE_TOKEN_KEY := "bridge_auth_token"
+
 
 # =============================================================================
 # Types
@@ -140,6 +143,9 @@ var _recent_projects: Array[RecentProject] = []
 
 ## Available presets
 var _presets: Dictionary = {}  # name -> Preset
+
+## Bridge authentication token
+var _bridge_token: String = ""
 
 
 # =============================================================================
@@ -278,6 +284,42 @@ func set_project_kill_agents(path: String, value: bool) -> void:
 
 
 # =============================================================================
+# Public API - Bridge Authentication
+# =============================================================================
+
+## Get the stored bridge authentication token
+func get_bridge_token() -> String:
+	return _bridge_token
+
+
+## Set the bridge authentication token
+func set_bridge_token(token: String) -> void:
+	_bridge_token = token
+	_save_config()
+
+
+## Check if a bridge token is set
+func has_bridge_token() -> bool:
+	return _bridge_token != ""
+
+
+## Clear the bridge authentication token
+func clear_bridge_token() -> void:
+	_bridge_token = ""
+	_save_config()
+
+
+## Generate a new random bridge token (32 hex characters)
+func generate_bridge_token() -> String:
+	var bytes := PackedByteArray()
+	for i in range(16):
+		bytes.append(randi() % 256)
+	var token := bytes.hex_encode()
+	set_bridge_token(token)
+	return token
+
+
+# =============================================================================
 # Public API - Presets
 # =============================================================================
 
@@ -366,6 +408,9 @@ func _load_config() -> void:
 		var preset_dict: Dictionary = presets_data[preset_name]
 		_presets[preset_name] = Preset.from_dict(preset_dict)
 
+	# Load bridge token
+	_bridge_token = data.get(BRIDGE_TOKEN_KEY, "")
+
 
 func _save_config() -> void:
 	var data := {
@@ -381,6 +426,10 @@ func _save_config() -> void:
 	for preset_name: String in _presets:
 		var preset: Preset = _presets[preset_name]
 		data["presets"][preset_name] = preset.to_dict()
+
+	# Save bridge token
+	if _bridge_token != "":
+		data[BRIDGE_TOKEN_KEY] = _bridge_token
 
 	var json_text := JSON.stringify(data, "\t")
 

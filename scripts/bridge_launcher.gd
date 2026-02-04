@@ -37,12 +37,32 @@ var _we_launched_bridge: bool = false
 ## Bridge port
 var _port: int = DEFAULT_PORT
 
+## Authentication token
+var _token: String = ""
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
+	# Load or generate token from ProjectConfig
+	_init_token()
+
 	# Auto-launch bridge
 	_launch_bridge()
+
+
+## Initialize the authentication token
+func _init_token() -> void:
+	var project_config := get_node_or_null("/root/ProjectConfig")
+	if project_config:
+		if project_config.has_bridge_token():
+			_token = project_config.get_bridge_token()
+		else:
+			# Generate a new token if none exists
+			_token = project_config.generate_bridge_token()
+			print("BridgeLauncher: Generated new auth token")
+	else:
+		push_warning("BridgeLauncher: ProjectConfig not found, token auth disabled")
 
 
 func _notification(what: int) -> void:
@@ -96,6 +116,11 @@ func get_bridge_port() -> int:
 	return _port
 
 
+## Get the authentication token
+func get_bridge_token() -> String:
+	return _token
+
+
 ## Check if we launched the bridge
 func did_we_launch_bridge() -> bool:
 	return _we_launched_bridge
@@ -123,6 +148,11 @@ func _launch_bridge() -> void:
 		"--port", str(_port),
 		"--bind", "127.0.0.1"
 	]
+
+	# Add token if available
+	if _token != "":
+		args.append("--token")
+		args.append(_token)
 
 	# Launch bridge process
 	_bridge_pid = OS.create_process(binary_path, args)
