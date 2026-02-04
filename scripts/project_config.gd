@@ -39,12 +39,18 @@ class RecentProject:
 	var name: String
 	var last_opened: int  # Unix timestamp
 	var preset: String  # Last used preset
+	var preferred_layout: String  # Project-specific layout name
+	var kill_agents_on_switch: bool  # Whether to kill agents when switching away
+	var custom_settings: Dictionary  # Additional project-specific settings
 
 	func _init(p_path: String = "", p_name: String = "") -> void:
 		path = p_path
 		name = p_name if p_name != "" else _extract_name(p_path)
 		last_opened = Time.get_unix_time_from_system()
 		preset = ""
+		preferred_layout = ""  # Empty means use default behavior
+		kill_agents_on_switch = true  # Default to killing agents
+		custom_settings = {}
 
 	static func _extract_name(p_path: String) -> String:
 		if p_path == "":
@@ -59,7 +65,10 @@ class RecentProject:
 			"path": path,
 			"name": name,
 			"last_opened": last_opened,
-			"preset": preset
+			"preset": preset,
+			"preferred_layout": preferred_layout,
+			"kill_agents_on_switch": kill_agents_on_switch,
+			"custom_settings": custom_settings
 		}
 
 	static func from_dict(data: Dictionary) -> RecentProject:
@@ -69,6 +78,9 @@ class RecentProject:
 		)
 		project.last_opened = data.get("last_opened", 0)
 		project.preset = data.get("preset", "")
+		project.preferred_layout = data.get("preferred_layout", "")
+		project.kill_agents_on_switch = data.get("kill_agents_on_switch", true)
+		project.custom_settings = data.get("custom_settings", {})
 		return project
 
 
@@ -211,6 +223,58 @@ func get_last_preset(path: String) -> String:
 		if project.path == path:
 			return project.preset
 	return ""
+
+
+## Get a project by path
+func get_project(path: String) -> RecentProject:
+	for project in _recent_projects:
+		if project.path == path:
+			return project
+	return null
+
+
+## Update project settings
+func update_project_settings(path: String, settings: Dictionary) -> void:
+	for project in _recent_projects:
+		if project.path == path:
+			if settings.has("preset"):
+				project.preset = settings["preset"]
+			if settings.has("preferred_layout"):
+				project.preferred_layout = settings["preferred_layout"]
+			if settings.has("kill_agents_on_switch"):
+				project.kill_agents_on_switch = settings["kill_agents_on_switch"]
+			if settings.has("custom_settings"):
+				project.custom_settings.merge(settings["custom_settings"], true)
+			project.last_opened = Time.get_unix_time_from_system()
+			_save_config()
+			recent_projects_changed.emit()
+			return
+
+
+## Get preferred layout for a project
+func get_project_layout(path: String) -> String:
+	for project in _recent_projects:
+		if project.path == path:
+			return project.preferred_layout
+	return ""
+
+
+## Set preferred layout for a project
+func set_project_layout(path: String, layout_name: String) -> void:
+	update_project_settings(path, {"preferred_layout": layout_name})
+
+
+## Get kill agents setting for a project
+func get_project_kill_agents(path: String) -> bool:
+	for project in _recent_projects:
+		if project.path == path:
+			return project.kill_agents_on_switch
+	return true  # Default to killing agents
+
+
+## Set kill agents setting for a project
+func set_project_kill_agents(path: String, value: bool) -> void:
+	update_project_settings(path, {"kill_agents_on_switch": value})
 
 
 # =============================================================================

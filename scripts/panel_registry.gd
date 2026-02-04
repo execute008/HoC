@@ -10,6 +10,7 @@ extends Node
 const ProjectSpawnMenuScript = preload("res://components/spawn_menu/project_spawn_menu.gd")
 const AgentListPanelScript = preload("res://components/agent_list/agent_list_panel.gd")
 const WorktreePanelScript = preload("res://components/worktree_panel/worktree_panel.gd")
+const ProjectSwitcherPanelScript = preload("res://components/project_switcher/project_switcher_panel.gd")
 
 
 ## Emitted when a panel is registered
@@ -72,6 +73,14 @@ const PANEL_TYPES := {
 		"script": "res://components/worktree_panel/worktree_panel.gd",
 		"default_size": Vector2(0.7, 0.8),
 		"icon": "🌳"
+	},
+	"project_switcher": {
+		"name": "Project Switcher",
+		"description": "Switch between projects with layout persistence",
+		"scene": "res://components/project_switcher/project_switcher_panel.gd",
+		"script": "res://components/project_switcher/project_switcher_panel.gd",
+		"default_size": Vector2(0.65, 0.75),
+		"icon": "📂"
 	}
 }
 
@@ -203,6 +212,8 @@ func spawn_panel(type_key: String, spawn_transform: Transform3D, parent: Node3D 
 		panel = AgentListPanelScript.new()
 	elif type_key == "worktree":
 		panel = WorktreePanelScript.new()
+	elif type_key == "project_switcher":
+		panel = ProjectSwitcherPanelScript.new()
 	else:
 		panel = WorkspacePanel.new()
 		if type_info.has("content_scene"):
