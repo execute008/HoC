@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://btrmplnpnl"]
+
+[ext_resource type="Script" uid="uid://c8qqek82paac8" path="res://components/terminal_panel/terminal_panel.gd" id="1_script"]
+
+[node name="TerminalPanel" type="Node3D"]
+script = ExtResource("1_script")
+title = "Terminal"
+viewport_size = Vector2(960, 600)
