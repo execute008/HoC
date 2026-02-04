@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3 uid="uid://d2nk8rj5wmv3p"]
+
+[ext_resource type="ShaderMaterial" uid="uid://cqg8f2xwm7r5k" path="res://shaders/infinite_grid.tres" id="1_material"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_grid"]
+size = Vector2(200, 200)
+subdivide_width = 1
+subdivide_depth = 1
+
+[node name="InfiniteGrid" type="MeshInstance3D"]
+cast_shadow = 0
+mesh = SubResource("PlaneMesh_grid")
+surface_material_override/0 = ExtResource("1_material")

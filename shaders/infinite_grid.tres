@@ -1,0 +1,15 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://cqg8f2xwm7r5k"]
+
+[ext_resource type="Shader" path="res://shaders/infinite_grid.gdshader" id="1_shader"]
+
+[resource]
+render_priority = -1
+shader = ExtResource("1_shader")
+shader_parameter/grid_color = Color(0.4, 0.45, 0.5, 0.8)
+shader_parameter/secondary_grid_color = Color(0.5, 0.55, 0.6, 1.0)
+shader_parameter/primary_line_width = 0.02
+shader_parameter/secondary_line_width = 0.015
+shader_parameter/primary_grid_size = 1.0
+shader_parameter/secondary_grid_scale = 10.0
+shader_parameter/fade_start = 15.0
+shader_parameter/fade_end = 40.0
