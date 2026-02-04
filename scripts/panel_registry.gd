@@ -8,6 +8,7 @@ extends Node
 
 
 const ProjectSpawnMenuScript = preload("res://components/spawn_menu/project_spawn_menu.gd")
+const AgentListPanelScript = preload("res://components/agent_list/agent_list_panel.gd")
 
 
 ## Emitted when a panel is registered
@@ -54,6 +55,14 @@ const PANEL_TYPES := {
 		"content_scene": "res://components/workspace_panel/demo_content.tscn",
 		"default_size": Vector2(1.2, 0.9),
 		"icon": "🎮"
+	},
+	"agent_list": {
+		"name": "Agents",
+		"description": "Manage active agent sessions",
+		"scene": "res://components/agent_list/agent_list_panel.gd",
+		"script": "res://components/agent_list/agent_list_panel.gd",
+		"default_size": Vector2(0.5, 0.6),
+		"icon": "📋"
 	}
 }
 
@@ -181,6 +190,8 @@ func spawn_panel(type_key: String, spawn_transform: Transform3D, parent: Node3D 
 		panel = TerminalPanel.new()
 	elif type_key == "agent_spawn":
 		panel = ProjectSpawnMenuScript.new()
+	elif type_key == "agent_list":
+		panel = AgentListPanelScript.new()
 	else:
 		panel = WorkspacePanel.new()
 		if type_info.has("content_scene"):

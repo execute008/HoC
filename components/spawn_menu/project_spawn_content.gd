@@ -42,6 +42,7 @@ const THEME_SUCCESS_COLOR := Color(0.3, 0.9, 0.4)
 # =============================================================================
 
 var _project_config: Node = null
+var _agent_orchestrator: Node = null
 var _selected_path: String = ""
 var _selected_preset: String = "default"
 
@@ -66,9 +67,11 @@ var _file_dialog: FileDialog
 
 func _ready() -> void:
 	_connect_project_config()
+	_connect_agent_orchestrator()
 	_setup_ui()
 	_populate_recent_projects()
 	_populate_presets()
+	_update_spawn_button_state()
 
 
 func _connect_project_config() -> void:
@@ -79,6 +82,16 @@ func _connect_project_config() -> void:
 
 	_project_config.recent_projects_changed.connect(_on_recent_projects_changed)
 	_project_config.presets_changed.connect(_on_presets_changed)
+
+
+func _connect_agent_orchestrator() -> void:
+	_agent_orchestrator = get_node_or_null("/root/AgentOrchestrator")
+	if not _agent_orchestrator:
+		push_warning("ProjectSpawnContent: AgentOrchestrator autoload not found")
+		return
+
+	_agent_orchestrator.agent_count_changed.connect(_on_agent_count_changed)
+	_agent_orchestrator.spawn_rejected.connect(_on_spawn_rejected)
 
 
 # =============================================================================
@@ -619,7 +632,28 @@ func _on_spawn_button_pressed() -> void:
 # =============================================================================
 
 func _update_spawn_button_state() -> void:
-	_spawn_button.disabled = _selected_path == ""
+	var path_valid := _selected_path != ""
+	var can_spawn := true
+
+	if _agent_orchestrator:
+		can_spawn = _agent_orchestrator.can_spawn_agent(_selected_path)
+
+	_spawn_button.disabled = not path_valid or not can_spawn
+
+	# Update button text to show limit status
+	if not can_spawn and path_valid:
+		var status := _agent_orchestrator.get_resource_status()
+		_spawn_button.text = "Limit Reached (%d/%d)" % [status.active_agents, status.max_agents]
+	else:
+		_spawn_button.text = "Spawn Terminal"
+
+
+func _on_agent_count_changed(_count: int) -> void:
+	_update_spawn_button_state()
+
+
+func _on_spawn_rejected(reason: String, _current: int, _max: int) -> void:
+	_show_error(reason)
 
 
 func _show_error(message: String) -> void:

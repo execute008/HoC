@@ -20,6 +20,14 @@ signal spawn_failed(error_message: String)
 
 
 # =============================================================================
+# Configuration
+# =============================================================================
+
+## Whether to close the menu after spawning an agent
+@export var close_after_spawn: bool = false
+
+
+# =============================================================================
 # State
 # =============================================================================
 
@@ -182,8 +190,9 @@ func _on_agent_created(agent_id: String, session) -> void:
 	# Clear pending state
 	_cleanup_pending_spawn()
 
-	# Close the spawn menu
-	close()
+	# Optionally close the spawn menu
+	if close_after_spawn:
+		close()
 
 
 func _on_agent_exit(agent_id: String, exit_code: int, _reason: String) -> void:

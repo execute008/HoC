@@ -85,6 +85,25 @@ class AgentSession:
 
 
 # =============================================================================
+# Constants
+# =============================================================================
+
+## Maximum number of concurrent agents allowed
+const MAX_CONCURRENT_AGENTS := 10
+
+## Default maximum agents per project
+const DEFAULT_MAX_PER_PROJECT := 3
+
+
+# =============================================================================
+# Signals - Resource Limits
+# =============================================================================
+
+## Emitted when spawn is rejected due to resource limits
+signal spawn_rejected(reason: String, current_count: int, max_count: int)
+
+
+# =============================================================================
 # State
 # =============================================================================
 
@@ -97,6 +116,10 @@ var _pending_spawns: Array[Dictionary] = []
 
 ## Reference to BridgeClient autoload
 var _bridge_client: Node = null
+
+## Resource limits configuration
+var _max_concurrent_agents: int = MAX_CONCURRENT_AGENTS
+var _max_agents_per_project: int = DEFAULT_MAX_PER_PROJECT
 
 
 # =============================================================================
@@ -136,6 +159,11 @@ func spawn_agent(project_path: String, preset: String = "", cols: int = 0, rows:
 		push_error("AgentOrchestrator: Cannot spawn agent - not connected to bridge")
 		return ERR_CONNECTION_ERROR
 
+	# Check resource limits
+	var limit_error := _check_spawn_limits(project_path)
+	if limit_error != OK:
+		return limit_error
+
 	# Store pending spawn info to match with response
 	_pending_spawns.append({
 		"project_path": project_path,
@@ -145,6 +173,54 @@ func spawn_agent(project_path: String, preset: String = "", cols: int = 0, rows:
 	})
 
 	return _bridge_client.spawn_agent(project_path, preset, cols, rows)
+
+
+## Check if spawning a new agent would exceed resource limits
+func _check_spawn_limits(project_path: String) -> Error:
+	# Check total agent limit
+	var active_count := get_active_count()
+	if active_count >= _max_concurrent_agents:
+		var msg := "Maximum concurrent agents reached (%d/%d)" % [active_count, _max_concurrent_agents]
+		push_warning("AgentOrchestrator: %s" % msg)
+		spawn_rejected.emit(msg, active_count, _max_concurrent_agents)
+		return ERR_CANT_CREATE
+
+	# Check per-project limit
+	var project_count := get_project_agent_count(project_path)
+	if project_count >= _max_agents_per_project:
+		var msg := "Maximum agents for project reached (%d/%d): %s" % [project_count, _max_agents_per_project, project_path]
+		push_warning("AgentOrchestrator: %s" % msg)
+		spawn_rejected.emit(msg, project_count, _max_agents_per_project)
+		return ERR_CANT_CREATE
+
+	return OK
+
+
+## Get count of active (non-exited) agents
+func get_active_count() -> int:
+	var count := 0
+	for session: AgentSession in _sessions.values():
+		if session.state != AgentState.EXITED:
+			count += 1
+	return count
+
+
+## Get count of agents for a specific project path
+func get_project_agent_count(project_path: String) -> int:
+	var count := 0
+	for session: AgentSession in _sessions.values():
+		if session.project_path == project_path and session.state != AgentState.EXITED:
+			count += 1
+	return count
+
+
+## Get all sessions for a specific project
+func get_project_sessions(project_path: String) -> Array[AgentSession]:
+	var result: Array[AgentSession] = []
+	for session: AgentSession in _sessions.values():
+		if session.project_path == project_path:
+			result.append(session)
+	return result
 
 
 ## Kill an agent by ID
@@ -442,3 +518,62 @@ func cleanup_exited() -> int:
 		agent_count_changed.emit(_sessions.size())
 
 	return removed
+
+
+# =============================================================================
+# Public API - Resource Limits
+# =============================================================================
+
+## Set maximum concurrent agents
+func set_max_concurrent_agents(count: int) -> void:
+	_max_concurrent_agents = max(1, count)
+
+
+## Get maximum concurrent agents
+func get_max_concurrent_agents() -> int:
+	return _max_concurrent_agents
+
+
+## Set maximum agents per project
+func set_max_agents_per_project(count: int) -> void:
+	_max_agents_per_project = max(1, count)
+
+
+## Get maximum agents per project
+func get_max_agents_per_project() -> int:
+	return _max_agents_per_project
+
+
+## Check if spawning is allowed (within resource limits)
+func can_spawn_agent(project_path: String = "") -> bool:
+	if get_active_count() >= _max_concurrent_agents:
+		return false
+	if project_path != "" and get_project_agent_count(project_path) >= _max_agents_per_project:
+		return false
+	return true
+
+
+## Get resource limit status
+func get_resource_status() -> Dictionary:
+	return {
+		"active_agents": get_active_count(),
+		"max_agents": _max_concurrent_agents,
+		"running_agents": get_running_count(),
+		"exited_agents": get_sessions_by_state(AgentState.EXITED).size(),
+		"can_spawn": can_spawn_agent()
+	}
+
+
+# =============================================================================
+# Public API - Kill All
+# =============================================================================
+
+## Kill all running agents
+func kill_all_agents(signal_num: int = 0) -> int:
+	var killed := 0
+	for session: AgentSession in _sessions.values():
+		if session.state == AgentState.RUNNING or session.state == AgentState.SPAWNING:
+			var err := kill_agent(session.agent_id, signal_num)
+			if err == OK:
+				killed += 1
+	return killed
