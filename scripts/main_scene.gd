@@ -3,7 +3,8 @@ extends Node3D
 
 ## Main scene controller
 ##
-## Handles initialization tasks like registering existing panels with the registry.
+## Handles initialization tasks like registering existing panels with the registry
+## and restoring/saving workspace layouts between sessions.
 
 
 func _ready() -> void:
@@ -12,6 +13,16 @@ func _ready() -> void:
 
 	# Register any existing panels with the registry
 	_register_existing_panels()
+
+	# Restore previous session layout
+	_restore_session_layout()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		# Save session layout before closing
+		_save_session_layout()
+		get_tree().quit()
 
 
 func _register_existing_panels() -> void:
@@ -34,3 +45,29 @@ func _find_panels(node: Node) -> Array[WorkspacePanel]:
 		result.append_array(_find_panels(child))
 
 	return result
+
+
+func _restore_session_layout() -> void:
+	# Check if LayoutManager is available
+	var layout_manager := get_node_or_null("/root/LayoutManager")
+	if not layout_manager:
+		return
+
+	# Restore session layout if it exists
+	if layout_manager.has_layout("_session"):
+		await layout_manager.load_layout("_session", false)  # Don't close existing panels
+		print("MainScene: Restored session layout")
+	elif layout_manager.has_layout(layout_manager.DEFAULT_LAYOUT_NAME):
+		await layout_manager.load_layout(layout_manager.DEFAULT_LAYOUT_NAME, false)
+		print("MainScene: Loaded default layout")
+
+
+func _save_session_layout() -> void:
+	# Check if LayoutManager is available
+	var layout_manager := get_node_or_null("/root/LayoutManager")
+	if not layout_manager:
+		return
+
+	# Save current layout as session layout
+	layout_manager.save_session_layout()
+	print("MainScene: Saved session layout")

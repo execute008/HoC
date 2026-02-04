@@ -25,6 +25,7 @@ BridgeClient="*res://scripts/bridge_client.gd"
 AgentOrchestrator="*res://scripts/agent_orchestrator.gd"
 InputRouter="*res://scripts/input_router.gd"
 ProjectConfig="*res://scripts/project_config.gd"
+LayoutManager="*res://scripts/layout_manager.gd"
 
 [editor_plugins]
 
