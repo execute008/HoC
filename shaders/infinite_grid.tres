@@ -5,8 +5,8 @@
 [resource]
 render_priority = -1
 shader = ExtResource("1_shader")
-shader_parameter/grid_color = Color(0.4, 0.45, 0.5, 0.8)
-shader_parameter/secondary_grid_color = Color(0.5, 0.55, 0.6, 1.0)
+shader_parameter/grid_color = Color(0.15, 0.35, 0.45, 0.6)
+shader_parameter/secondary_grid_color = Color(0.2, 0.5, 0.6, 0.8)
 shader_parameter/primary_line_width = 0.02
 shader_parameter/secondary_line_width = 0.015
 shader_parameter/primary_grid_size = 1.0

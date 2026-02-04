@@ -1,0 +1,46 @@
+[gd_scene load_steps=5 format=3 uid="uid://cenvironment_scene"]
+
+[ext_resource type="ShaderMaterial" uid="uid://b2skybox_scifi" path="res://shaders/sci_fi_skybox.tres" id="1_skybox"]
+[ext_resource type="PackedScene" uid="uid://d2nk8rj5wmv3p" path="res://scenes/infinite_grid.tscn" id="2_grid"]
+
+[sub_resource type="Sky" id="Sky_scifi"]
+sky_material = ExtResource("1_skybox")
+
+[sub_resource type="Environment" id="Environment_scifi"]
+background_mode = 2
+sky = SubResource("Sky_scifi")
+ambient_light_source = 2
+ambient_light_color = Color(0.4, 0.42, 0.5, 1)
+ambient_light_energy = 0.6
+reflected_light_source = 1
+tonemap_mode = 2
+tonemap_white = 1.2
+glow_enabled = true
+glow_intensity = 0.4
+glow_strength = 0.8
+glow_bloom = 0.1
+glow_blend_mode = 0
+glow_hdr_threshold = 1.2
+volumetric_fog_enabled = false
+
+[node name="Environment" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_scifi")
+
+[node name="AmbientLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75, 0.433013, 0, 20, 0)
+light_color = Color(0.7, 0.75, 0.9, 1)
+light_energy = 0.4
+light_indirect_energy = 0.3
+shadow_enabled = true
+shadow_opacity = 0.3
+
+[node name="FillLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, 0.433013, -0.25, 0, 0.5, 0.866025, 0.5, -0.75, 0.433013, 0, 15, 0)
+light_color = Color(0.5, 0.55, 0.7, 1)
+light_energy = 0.2
+shadow_enabled = false
+
+[node name="InfiniteGrid" parent="." instance=ExtResource("2_grid")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.001, 0)
