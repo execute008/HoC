@@ -43,6 +43,9 @@ anyhow = "1"
 # Futures utilities
 futures-util = "0.3"
 
+[dev-dependencies]
+tempfile = "3"
+
 [profile.release]
 lto = true
 codegen-units = 1
