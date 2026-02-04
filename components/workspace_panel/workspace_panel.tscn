@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c0wspnl2dv8uo"]
+
+[ext_resource type="Script" uid="uid://b6nyshbg51kxw" path="res://components/workspace_panel/workspace_panel.gd" id="1_script"]
+
+[node name="WorkspacePanel" type="Node3D"]
+script = ExtResource("1_script")
