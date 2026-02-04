@@ -4,3 +4,6 @@
 
 # Rust build artifacts
 /bridge/target/
+.ralph-tui
+tasks
+bin/hoc-bridge
