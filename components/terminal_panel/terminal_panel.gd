@@ -7,6 +7,7 @@ extends WorkspacePanel
 ##
 ## Extends WorkspacePanel to provide a terminal display with ANSI color support,
 ## scrollback buffer, and VR controller scrolling via thumbstick.
+## Supports binding to agent sessions for real-time output display.
 
 
 ## Emitted when terminal content is updated
@@ -14,6 +15,12 @@ signal content_updated
 
 ## Emitted when scroll position changes
 signal scroll_changed(position: int, max_position: int)
+
+## Emitted when bound agent state changes
+signal agent_state_changed(state: int)
+
+## Emitted when bound agent exits
+signal agent_exited(exit_code: int, reason: String)
 
 
 @export_group("Terminal")
@@ -44,6 +51,14 @@ signal scroll_changed(position: int, max_position: int)
 ## Thumbstick deadzone for scrolling
 @export var scroll_deadzone: float = 0.3
 
+@export_group("Agent Binding")
+
+## Auto-scroll to bottom when new output arrives (if already at bottom)
+@export var auto_scroll: bool = true
+
+## Show status indicator for agent state
+@export var show_status_indicator: bool = true
+
 
 # Internal state
 var _terminal_content: TerminalContent = null
@@ -51,6 +66,14 @@ var _is_terminal_focused: bool = false
 var _scroll_accumulator: float = 0.0
 var _left_controller: XRController3D = null
 var _right_controller: XRController3D = null
+
+# Agent binding state
+var _bound_agent_id: String = ""
+var _agent_orchestrator: Node = null
+var _output_callback: Callable
+var _agent_state: int = -1  # -1 = unbound, otherwise AgentOrchestrator.AgentState
+var _status_indicator: Control = null
+var _was_at_bottom: bool = true
 
 
 func _ready() -> void:
@@ -72,6 +95,10 @@ func _ready() -> void:
 
 	if not Engine.is_editor_hint():
 		_find_controllers()
+		_connect_agent_orchestrator()
+
+		# Create output callback
+		_output_callback = _on_agent_output
 
 
 func _process(delta: float) -> void:
@@ -149,6 +176,268 @@ func _process_controller_scroll(delta: float) -> void:
 func _on_terminal_content_changed() -> void:
 	content_updated.emit()
 
+
+func _connect_agent_orchestrator() -> void:
+	_agent_orchestrator = get_node_or_null("/root/AgentOrchestrator")
+	if not _agent_orchestrator:
+		push_warning("TerminalPanel: AgentOrchestrator autoload not found")
+		return
+
+	# Connect to agent lifecycle signals
+	_agent_orchestrator.agent_state_changed.connect(_on_orchestrator_agent_state_changed)
+	_agent_orchestrator.agent_exit.connect(_on_orchestrator_agent_exit)
+	_agent_orchestrator.agent_removed.connect(_on_orchestrator_agent_removed)
+
+
+func _on_orchestrator_agent_state_changed(agent_id: String, old_state: int, new_state: int) -> void:
+	if agent_id != _bound_agent_id:
+		return
+
+	_agent_state = new_state
+	_update_status_indicator()
+	agent_state_changed.emit(new_state)
+
+
+func _on_orchestrator_agent_exit(agent_id: String, exit_code: int, reason: String) -> void:
+	if agent_id != _bound_agent_id:
+		return
+
+	agent_exited.emit(exit_code, reason)
+
+
+func _on_orchestrator_agent_removed(agent_id: String) -> void:
+	if agent_id != _bound_agent_id:
+		return
+
+	# Agent was removed from orchestrator, unbind
+	unbind_agent()
+
+
+func _on_agent_output(data: String) -> void:
+	# Track if we're at the bottom before writing
+	_was_at_bottom = is_at_bottom()
+
+	# Write data to terminal with ANSI parsing
+	write(data)
+
+	# Auto-scroll to bottom if we were already at the bottom
+	if auto_scroll and _was_at_bottom:
+		scroll_to_bottom()
+
+
+# =============================================================================
+# Public API - Agent Binding
+# =============================================================================
+
+## Bind this terminal to an agent session by ID.
+## Real-time output will be displayed and agent state will be tracked.
+## Returns true if binding was successful.
+func bind_agent(agent_id: String) -> bool:
+	if not _agent_orchestrator:
+		push_error("TerminalPanel: Cannot bind agent - AgentOrchestrator not available")
+		return false
+
+	if not _agent_orchestrator.has_agent(agent_id):
+		push_error("TerminalPanel: Cannot bind agent - unknown agent ID: %s" % agent_id)
+		return false
+
+	# Unbind current agent if any
+	if _bound_agent_id != "":
+		unbind_agent()
+
+	# Register output callback
+	var success: bool = _agent_orchestrator.register_output_callback(agent_id, _output_callback)
+	if not success:
+		push_error("TerminalPanel: Failed to register output callback for agent: %s" % agent_id)
+		return false
+
+	_bound_agent_id = agent_id
+
+	# Get current state
+	var session = _agent_orchestrator.get_session(agent_id)
+	if session:
+		_agent_state = session.state
+
+		# Update title to show agent binding
+		if title == "Terminal":
+			title = "Terminal [%s]" % agent_id.substr(0, 8)
+
+	# Update status indicator
+	_update_status_indicator()
+
+	print("TerminalPanel: Bound to agent: %s" % agent_id)
+	return true
+
+
+## Unbind from current agent session.
+## The terminal will stop receiving output from the agent.
+func unbind_agent() -> void:
+	if _bound_agent_id == "" or not _agent_orchestrator:
+		return
+
+	# Unregister callback
+	_agent_orchestrator.unregister_output_callback(_bound_agent_id, _output_callback)
+
+	var old_id := _bound_agent_id
+	_bound_agent_id = ""
+	_agent_state = -1
+
+	# Reset title
+	if title.begins_with("Terminal ["):
+		title = "Terminal"
+
+	# Update status indicator
+	_update_status_indicator()
+
+	print("TerminalPanel: Unbound from agent: %s" % old_id)
+
+
+## Check if terminal is bound to an agent
+func is_bound() -> bool:
+	return _bound_agent_id != ""
+
+
+## Get the bound agent ID (empty string if not bound)
+func get_bound_agent_id() -> String:
+	return _bound_agent_id
+
+
+## Get the current agent state (-1 if not bound)
+func get_agent_state() -> int:
+	return _agent_state
+
+
+## Get the agent state as a human-readable string
+func get_agent_state_string() -> String:
+	match _agent_state:
+		-1:
+			return "Unbound"
+		0:  # SPAWNING
+			return "Spawning"
+		1:  # RUNNING
+			return "Running"
+		2:  # EXITING
+			return "Exiting"
+		3:  # EXITED
+			return "Exited"
+		_:
+			return "Unknown"
+
+
+## Send input to the bound agent (if running)
+func send_input(input: String) -> Error:
+	if _bound_agent_id == "" or not _agent_orchestrator:
+		return ERR_UNCONFIGURED
+
+	return _agent_orchestrator.send_input(_bound_agent_id, input)
+
+
+## Kill the bound agent
+func kill_agent(signal_num: int = 0) -> Error:
+	if _bound_agent_id == "" or not _agent_orchestrator:
+		return ERR_UNCONFIGURED
+
+	return _agent_orchestrator.kill_agent(_bound_agent_id, signal_num)
+
+
+# =============================================================================
+# Status Indicator
+# =============================================================================
+
+func _update_status_indicator() -> void:
+	if not show_status_indicator:
+		if _status_indicator:
+			_status_indicator.queue_free()
+			_status_indicator = null
+		return
+
+	# Create status indicator if needed
+	if not _status_indicator:
+		_create_status_indicator()
+
+	if not _status_indicator:
+		return
+
+	# Update indicator based on state
+	var color: Color
+	var tooltip: String
+
+	match _agent_state:
+		-1:  # Unbound
+			color = Color(0.4, 0.4, 0.4, 0.8)  # Gray
+			tooltip = "Not bound to agent"
+		0:  # SPAWNING
+			color = Color(1.0, 0.8, 0.0, 1.0)  # Yellow
+			tooltip = "Agent spawning..."
+		1:  # RUNNING
+			color = Color(0.2, 0.9, 0.3, 1.0)  # Green
+			tooltip = "Agent running"
+		2:  # EXITING
+			color = Color(1.0, 0.5, 0.0, 1.0)  # Orange
+			tooltip = "Agent exiting..."
+		3:  # EXITED
+			color = Color(0.6, 0.6, 0.6, 1.0)  # Light gray
+			tooltip = "Agent exited"
+		_:
+			color = Color(0.5, 0.5, 0.5, 0.8)
+			tooltip = "Unknown state"
+
+	# Update the indicator color
+	var indicator_circle = _status_indicator.get_node_or_null("Circle")
+	if indicator_circle:
+		indicator_circle.color = color
+
+	_status_indicator.tooltip_text = tooltip
+
+
+func _create_status_indicator() -> void:
+	if not _terminal_content:
+		return
+
+	# Create a container for the status indicator
+	_status_indicator = Control.new()
+	_status_indicator.name = "StatusIndicator"
+	_status_indicator.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_status_indicator.position = Vector2(-24, 8)
+	_status_indicator.size = Vector2(16, 16)
+	_status_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# Create the circle indicator
+	var circle = ColorRect.new()
+	circle.name = "Circle"
+	circle.set_anchors_preset(Control.PRESET_FULL_RECT)
+	circle.color = Color(0.4, 0.4, 0.4, 0.8)
+
+	# Add corner radius via shader for circle appearance
+	var shader_code = """
+shader_type canvas_item;
+
+void fragment() {
+	vec2 center = vec2(0.5, 0.5);
+	float dist = distance(UV, center);
+	if (dist > 0.5) {
+		discard;
+	}
+	COLOR = COLOR;
+}
+"""
+	var shader = Shader.new()
+	shader.code = shader_code
+	var shader_mat = ShaderMaterial.new()
+	shader_mat.shader = shader
+	circle.material = shader_mat
+
+	_status_indicator.add_child(circle)
+
+	# Add to terminal content's parent (the viewport)
+	var viewport = _terminal_content.get_parent()
+	if viewport:
+		viewport.add_child(_status_indicator)
+
+
+# =============================================================================
+# Terminal Output
+# =============================================================================
 
 ## Write text to the terminal (with ANSI parsing)
 func write(text: String) -> void:
