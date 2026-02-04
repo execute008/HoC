@@ -27,6 +27,12 @@ This is a **Godot 4.5** game project targeting mobile platforms.
 ### Exporting
 
 ```bash
+# Export for Meta Quest (debug APK)
+godot --headless --export-debug "Meta Quest" builds/quest/hoc-debug.apk
+
+# Export for Meta Quest (release APK)
+godot --headless --export-release "Meta Quest" builds/quest/hoc-release.apk
+
 # Export for Android (debug)
 godot --headless --export-debug "Android" builds/android/game.apk
 
@@ -36,6 +42,35 @@ godot --headless --export-debug "iOS" builds/ios/game.ipa
 # List available export presets
 godot --headless --export-list
 ```
+
+### Meta Quest Export Prerequisites
+
+Before exporting to Meta Quest, ensure:
+
+1. **Android SDK** is installed and configured in Godot Editor Settings
+2. **JDK 17+** is installed (required for Gradle builds)
+3. **Debug keystore** is configured for debug builds (Godot can auto-generate)
+4. **Release keystore** is created for release builds
+
+```bash
+# Install APK to Quest via ADB
+adb install -r builds/quest/hoc-debug.apk
+
+# Launch app on Quest
+adb shell am start -n com.hoc.app/com.godot.game.GodotApp
+
+# View Quest logs
+adb logcat -s godot
+```
+
+### Quest Export Configuration
+
+The project includes a "Meta Quest" export preset configured with:
+- **Target devices**: Quest 3, Quest 3S, Quest Pro
+- **Hand tracking**: Enabled with high frequency
+- **Passthrough**: Enabled
+- **Min SDK**: 29 (Android 10)
+- **Architecture**: arm64-v8a only
 
 ### Linting and Formatting (gdtoolkit)
 
