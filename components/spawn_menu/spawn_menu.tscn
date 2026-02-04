@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://spawn_menu_scene"]
+
+[ext_resource type="Script" uid="uid://spawn_menu_script" path="res://components/spawn_menu/spawn_menu.gd" id="1_script"]
+
+[node name="SpawnMenu" type="Node3D"]
+script = ExtResource("1_script")
