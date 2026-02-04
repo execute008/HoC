@@ -9,6 +9,7 @@ extends Node3D
 
 
 const SpawnMenuScript = preload("res://components/spawn_menu/spawn_menu.gd")
+const ProjectSpawnMenuScript = preload("res://components/spawn_menu/project_spawn_menu.gd")
 
 
 ## Emitted when the spawn menu is opened
@@ -19,6 +20,9 @@ signal menu_closed
 
 ## Emitted when a panel is spawned
 signal panel_spawned(panel: WorkspacePanel, type_key: String)
+
+## Emitted when an agent is spawned
+signal agent_spawned(agent_id: String, terminal: TerminalPanel)
 
 
 ## The controller that triggers the spawn menu (left or right)
@@ -33,9 +37,12 @@ signal panel_spawned(panel: WorkspacePanel, type_key: String)
 ## Height offset for menu spawn position (meters)
 @export var menu_height_offset: float = 0.0
 
+## Which menu to show: project spawn menu (agents) or basic panel spawn menu
+@export_enum("project", "basic") var menu_type: String = "project"
+
 
 # Internal state
-var _spawn_menu: Node3D = null  # SpawnMenu instance
+var _spawn_menu: Node3D = null  # SpawnMenu or ProjectSpawnMenu instance
 var _xr_camera: XRCamera3D = null
 var _controller: XRController3D = null
 var _menu_button_pressed: bool = false
@@ -121,8 +128,12 @@ func _open_spawn_menu() -> void:
 		_spawn_menu.queue_free()
 		_spawn_menu = null
 
-	# Create spawn menu
-	_spawn_menu = SpawnMenuScript.new()
+	# Create spawn menu based on type
+	if menu_type == "project":
+		_spawn_menu = ProjectSpawnMenuScript.new()
+	else:
+		_spawn_menu = SpawnMenuScript.new()
+
 	_spawn_menu.set_xr_camera(_xr_camera)
 
 	# Add to scene
@@ -146,7 +157,12 @@ func _open_spawn_menu() -> void:
 
 	# Connect signals
 	_spawn_menu.closed.connect(_on_spawn_menu_closed)
-	_spawn_menu.panel_spawned.connect(_on_panel_spawned)
+
+	if menu_type == "project":
+		_spawn_menu.agent_spawned.connect(_on_agent_spawned)
+		_spawn_menu.spawn_failed.connect(_on_spawn_failed)
+	else:
+		_spawn_menu.panel_spawned.connect(_on_panel_spawned)
 
 	menu_opened.emit()
 
@@ -163,6 +179,14 @@ func _on_spawn_menu_closed() -> void:
 
 func _on_panel_spawned(panel: WorkspacePanel, type_key: String) -> void:
 	panel_spawned.emit(panel, type_key)
+
+
+func _on_agent_spawned(agent_id: String, terminal: TerminalPanel) -> void:
+	agent_spawned.emit(agent_id, terminal)
+
+
+func _on_spawn_failed(error_message: String) -> void:
+	push_error("PanelSpawner: Spawn failed - %s" % error_message)
 
 
 ## Check if the spawn menu is currently open

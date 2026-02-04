@@ -7,6 +7,9 @@ extends Node
 ## Provides panel creation, lookup, and lifecycle management.
 
 
+const ProjectSpawnMenuScript = preload("res://components/spawn_menu/project_spawn_menu.gd")
+
+
 ## Emitted when a panel is registered
 signal panel_registered(panel: WorkspacePanel)
 
@@ -34,6 +37,14 @@ const PANEL_TYPES := {
 		"script": "res://components/terminal_panel/terminal_panel.gd",
 		"default_size": Vector2(1.2, 0.8),
 		"icon": "💻"
+	},
+	"agent_spawn": {
+		"name": "Spawn Agent",
+		"description": "Spawn a new agent session with terminal",
+		"scene": "res://components/spawn_menu/project_spawn_menu.gd",
+		"script": "res://components/spawn_menu/project_spawn_menu.gd",
+		"default_size": Vector2(0.6, 0.7),
+		"icon": "🚀"
 	},
 	"demo": {
 		"name": "Demo Panel",
@@ -168,6 +179,8 @@ func spawn_panel(type_key: String, spawn_transform: Transform3D, parent: Node3D 
 	# Create panel based on type
 	if type_key == "terminal":
 		panel = TerminalPanel.new()
+	elif type_key == "agent_spawn":
+		panel = ProjectSpawnMenuScript.new()
 	else:
 		panel = WorkspacePanel.new()
 		if type_info.has("content_scene"):
