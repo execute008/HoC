@@ -40,9 +40,22 @@ var _port: int = DEFAULT_PORT
 ## Authentication token
 var _token: String = ""
 
+## Whether using remote bridge mode (skip local launch)
+var _remote_mode: bool = false
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+
+	# Check if remote connection is enabled
+	var project_config := get_node_or_null("/root/ProjectConfig")
+	if project_config and project_config.is_remote_connection_enabled():
+		_remote_mode = true
+		print("BridgeLauncher: Remote mode enabled, skipping local bridge launch")
+		# Emit bridge_started to signal that connection can proceed
+		# BridgeClient will handle remote connection directly
+		bridge_started.emit(-1)
+		return
 
 	# Load or generate token from ProjectConfig
 	_init_token()
@@ -124,6 +137,11 @@ func get_bridge_token() -> String:
 ## Check if we launched the bridge
 func did_we_launch_bridge() -> bool:
 	return _we_launched_bridge
+
+
+## Check if using remote bridge mode
+func is_remote_mode() -> bool:
+	return _remote_mode
 
 
 ## Launch the bridge process

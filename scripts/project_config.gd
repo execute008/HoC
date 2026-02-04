@@ -31,6 +31,9 @@ const CONFIG_FILE_PATH := "user://project_config.json"
 ## Key for storing bridge auth token (stored separately for security)
 const BRIDGE_TOKEN_KEY := "bridge_auth_token"
 
+## Key for storing remote bridge connection settings
+const REMOTE_CONNECTION_KEY := "remote_connection"
+
 
 # =============================================================================
 # Types
@@ -85,6 +88,52 @@ class RecentProject:
 		project.kill_agents_on_switch = data.get("kill_agents_on_switch", true)
 		project.custom_settings = data.get("custom_settings", {})
 		return project
+
+
+## Remote connection settings for connecting to PC-hosted bridge
+class RemoteConnection:
+	var enabled: bool  # Whether to use remote connection instead of local
+	var host: String  # IP address or hostname of remote PC
+	var port: int  # WebSocket port (default 9000)
+	var token: String  # Authentication token for remote bridge
+	var auto_reconnect: bool  # Whether to auto-reconnect on disconnect
+	var last_connected: int  # Unix timestamp of last successful connection
+
+	func _init() -> void:
+		enabled = false
+		host = ""
+		port = 9000
+		token = ""
+		auto_reconnect = true
+		last_connected = 0
+
+	func to_dict() -> Dictionary:
+		return {
+			"enabled": enabled,
+			"host": host,
+			"port": port,
+			"token": token,
+			"auto_reconnect": auto_reconnect,
+			"last_connected": last_connected
+		}
+
+	static func from_dict(data: Dictionary) -> RemoteConnection:
+		var conn := RemoteConnection.new()
+		conn.enabled = data.get("enabled", false)
+		conn.host = data.get("host", "")
+		conn.port = data.get("port", 9000)
+		conn.token = data.get("token", "")
+		conn.auto_reconnect = data.get("auto_reconnect", true)
+		conn.last_connected = data.get("last_connected", 0)
+		return conn
+
+	func get_websocket_url() -> String:
+		if host == "":
+			return ""
+		return "ws://%s:%d" % [host, port]
+
+	func is_configured() -> bool:
+		return host != "" and port > 0
 
 
 ## Preset configuration
@@ -146,6 +195,9 @@ var _presets: Dictionary = {}  # name -> Preset
 
 ## Bridge authentication token
 var _bridge_token: String = ""
+
+## Remote connection settings
+var _remote_connection: RemoteConnection = RemoteConnection.new()
 
 
 # =============================================================================
@@ -320,6 +372,79 @@ func generate_bridge_token() -> String:
 
 
 # =============================================================================
+# Public API - Remote Connection
+# =============================================================================
+
+## Emitted when remote connection settings change
+signal remote_connection_changed
+
+## Get the remote connection settings
+func get_remote_connection() -> RemoteConnection:
+	return _remote_connection
+
+
+## Check if remote connection is enabled
+func is_remote_connection_enabled() -> bool:
+	return _remote_connection.enabled and _remote_connection.is_configured()
+
+
+## Enable or disable remote connection
+func set_remote_connection_enabled(enabled: bool) -> void:
+	_remote_connection.enabled = enabled
+	_save_config()
+	remote_connection_changed.emit()
+
+
+## Set the remote connection host and port
+func set_remote_connection_host(host: String, port: int = 9000) -> void:
+	_remote_connection.host = host
+	_remote_connection.port = port
+	_save_config()
+	remote_connection_changed.emit()
+
+
+## Set the remote connection authentication token
+func set_remote_connection_token(token: String) -> void:
+	_remote_connection.token = token
+	_save_config()
+	remote_connection_changed.emit()
+
+
+## Enable or disable auto-reconnect for remote connection
+func set_remote_auto_reconnect(enabled: bool) -> void:
+	_remote_connection.auto_reconnect = enabled
+	_save_config()
+
+
+## Update the last connected timestamp
+func update_remote_last_connected() -> void:
+	_remote_connection.last_connected = Time.get_unix_time_from_system()
+	_save_config()
+
+
+## Get the full WebSocket URL for remote connection
+func get_remote_websocket_url() -> String:
+	return _remote_connection.get_websocket_url()
+
+
+## Configure remote connection with all settings at once
+func configure_remote_connection(host: String, port: int, token: String, enabled: bool = true) -> void:
+	_remote_connection.host = host
+	_remote_connection.port = port
+	_remote_connection.token = token
+	_remote_connection.enabled = enabled
+	_save_config()
+	remote_connection_changed.emit()
+
+
+## Clear remote connection settings
+func clear_remote_connection() -> void:
+	_remote_connection = RemoteConnection.new()
+	_save_config()
+	remote_connection_changed.emit()
+
+
+# =============================================================================
 # Public API - Presets
 # =============================================================================
 
@@ -411,6 +536,11 @@ func _load_config() -> void:
 	# Load bridge token
 	_bridge_token = data.get(BRIDGE_TOKEN_KEY, "")
 
+	# Load remote connection settings
+	var remote_data: Dictionary = data.get(REMOTE_CONNECTION_KEY, {})
+	if not remote_data.is_empty():
+		_remote_connection = RemoteConnection.from_dict(remote_data)
+
 
 func _save_config() -> void:
 	var data := {
@@ -430,6 +560,10 @@ func _save_config() -> void:
 	# Save bridge token
 	if _bridge_token != "":
 		data[BRIDGE_TOKEN_KEY] = _bridge_token
+
+	# Save remote connection settings
+	if _remote_connection.is_configured():
+		data[REMOTE_CONNECTION_KEY] = _remote_connection.to_dict()
 
 	var json_text := JSON.stringify(data, "\t")
 

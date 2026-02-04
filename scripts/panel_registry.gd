@@ -11,6 +11,7 @@ const ProjectSpawnMenuScript = preload("res://components/spawn_menu/project_spaw
 const AgentListPanelScript = preload("res://components/agent_list/agent_list_panel.gd")
 const WorktreePanelScript = preload("res://components/worktree_panel/worktree_panel.gd")
 const ProjectSwitcherPanelScript = preload("res://components/project_switcher/project_switcher_panel.gd")
+const RemoteConnectionContentScene = preload("res://components/remote_connection/remote_connection_content.tscn")
 
 
 ## Emitted when a panel is registered
@@ -81,6 +82,15 @@ const PANEL_TYPES := {
 		"script": "res://components/project_switcher/project_switcher_panel.gd",
 		"default_size": Vector2(0.65, 0.75),
 		"icon": "📂"
+	},
+	"remote_connection": {
+		"name": "Remote Connection",
+		"description": "Configure connection to PC-hosted bridge over WiFi",
+		"scene": "res://components/workspace_panel/workspace_panel.tscn",
+		"script": "res://components/workspace_panel/workspace_panel.gd",
+		"content_scene": "res://components/remote_connection/remote_connection_content.tscn",
+		"default_size": Vector2(0.6, 0.8),
+		"icon": "🌐"
 	}
 }
 

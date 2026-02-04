@@ -19,6 +19,9 @@ const MAX_RECONNECT_DELAY := 30.0
 ## Ping interval in seconds
 const PING_INTERVAL := 30.0
 
+## Connection timeout in seconds
+const CONNECTION_TIMEOUT := 10.0
+
 
 # =============================================================================
 # Signals - Connection State
@@ -118,6 +121,15 @@ var _auth_required: bool = false
 ## Whether authentication is complete
 var _authenticated: bool = false
 
+## Whether we're connecting to a remote bridge (vs local)
+var _is_remote: bool = false
+
+## Connection timeout timer
+var _connection_timer: Timer = null
+
+## Connection start time (for timeout detection)
+var _connection_start_time: float = 0.0
+
 
 ## Connection states
 enum State {
@@ -147,7 +159,14 @@ func _ready() -> void:
 	_ping_timer.timeout.connect(_on_ping_timer_timeout)
 	add_child(_ping_timer)
 
-	# Auto-connect after bridge is started
+	# Setup connection timeout timer
+	_connection_timer = Timer.new()
+	_connection_timer.one_shot = true
+	_connection_timer.wait_time = CONNECTION_TIMEOUT
+	_connection_timer.timeout.connect(_on_connection_timeout)
+	add_child(_connection_timer)
+
+	# Auto-connect after bridge is started (or to remote if configured)
 	_setup_auto_connect()
 
 
@@ -155,6 +174,15 @@ func _setup_auto_connect() -> void:
 	# Wait a frame for other autoloads to initialize
 	await get_tree().process_frame
 
+	# Check if remote connection is configured
+	var project_config := get_node_or_null("/root/ProjectConfig")
+	if project_config and project_config.is_remote_connection_enabled():
+		var remote := project_config.get_remote_connection()
+		print("BridgeClient: Remote connection configured, connecting to %s:%d" % [remote.host, remote.port])
+		_delayed_remote_connect(remote)
+		return
+
+	# Fall back to local bridge connection
 	var bridge_launcher := get_node_or_null("/root/BridgeLauncher")
 	if bridge_launcher:
 		# Get token from launcher (which got it from ProjectConfig)
@@ -173,9 +201,22 @@ func _setup_auto_connect() -> void:
 func _delayed_connect(port: int, token: String) -> void:
 	# Brief delay to ensure bridge is ready to accept connections
 	await get_tree().create_timer(0.5).timeout
+	_is_remote = false
 	var err := connect_to_localhost(port, token)
 	if err != OK:
 		push_error("BridgeClient: Auto-connect failed: %s" % error_string(err))
+
+
+func _delayed_remote_connect(remote) -> void:
+	# Brief delay before connecting to remote
+	await get_tree().create_timer(0.2).timeout
+	_is_remote = true
+	var url := remote.get_websocket_url()
+	var token: String = remote.token
+	print("BridgeClient: Connecting to remote bridge at %s" % url)
+	var err := connect_to_bridge(url, token)
+	if err != OK:
+		push_error("BridgeClient: Remote connection failed: %s" % error_string(err))
 
 
 func _process(_delta: float) -> void:
@@ -224,7 +265,17 @@ func connect_to_bridge(url: String, token: String = "") -> Error:
 
 ## Connect to localhost bridge on given port
 func connect_to_localhost(port: int = 9000, token: String = "") -> Error:
+	_is_remote = false
 	return connect_to_bridge("ws://127.0.0.1:%d" % port, token)
+
+
+## Connect to a remote bridge at the given host and port
+func connect_to_remote(host: String, port: int = 9000, token: String = "") -> Error:
+	if host == "":
+		push_error("BridgeClient: Remote host cannot be empty")
+		return ERR_INVALID_PARAMETER
+	_is_remote = true
+	return connect_to_bridge("ws://%s:%d" % [host, port], token)
 
 
 ## Disconnect from the bridge
@@ -269,6 +320,25 @@ func is_authenticated() -> bool:
 ## Set the authentication token (for reconnections)
 func set_auth_token(token: String) -> void:
 	_auth_token = token
+
+
+## Check if connected to a remote bridge (vs local)
+func is_remote_connection() -> bool:
+	return _is_remote
+
+
+## Get the current connection URL
+func get_connection_url() -> String:
+	return _url
+
+
+## Reconnect with current settings (useful after connection drop)
+func reconnect() -> Error:
+	if _url == "":
+		push_error("BridgeClient: No URL to reconnect to")
+		return ERR_UNCONFIGURED
+	disconnect_from_bridge()
+	return connect_to_bridge(_url, _auth_token)
 
 
 # =============================================================================
@@ -364,6 +434,12 @@ func _do_connect() -> Error:
 		return err
 
 	_state = State.CONNECTING
+	_connection_start_time = Time.get_ticks_msec() / 1000.0
+
+	# Start connection timeout for remote connections
+	if _is_remote:
+		_connection_timer.start()
+
 	return OK
 
 
@@ -373,10 +449,19 @@ func _on_connected() -> void:
 	_reconnect_delay = DEFAULT_RECONNECT_DELAY
 	_auto_reconnect = true
 
+	# Stop connection timeout timer
+	_connection_timer.stop()
+
 	# Start ping timer
 	_ping_timer.start()
 
-	print("BridgeClient: Connected to %s" % _url)
+	# Update last connected time for remote connections
+	if _is_remote:
+		var project_config := get_node_or_null("/root/ProjectConfig")
+		if project_config:
+			project_config.update_remote_last_connected()
+
+	print("BridgeClient: Connected to %s%s" % [_url, " (remote)" if _is_remote else " (local)"])
 	connected.emit()
 
 
@@ -419,6 +504,23 @@ func _on_reconnect_timer_timeout() -> void:
 func _on_ping_timer_timeout() -> void:
 	if _state == State.CONNECTED:
 		send_ping()
+
+
+func _on_connection_timeout() -> void:
+	if _state == State.CONNECTING:
+		var error_msg := "Connection timeout after %.1fs" % CONNECTION_TIMEOUT
+		push_warning("BridgeClient: %s" % error_msg)
+		connection_error.emit(error_msg)
+
+		# Close the socket and try to reconnect
+		if _socket:
+			_socket.close()
+			_socket = null
+
+		if _auto_reconnect:
+			_schedule_reconnect()
+		else:
+			_state = State.DISCONNECTED
 
 
 # =============================================================================
