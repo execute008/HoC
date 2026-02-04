@@ -14,6 +14,9 @@ signal scroll_requested(direction: int)
 ## Emitted when terminal content changes
 signal content_changed
 
+## Emitted when user clicks/taps on the terminal (for focus)
+signal focus_requested
+
 
 ## Default terminal colors (matches standard ANSI 16-color palette)
 const DEFAULT_FG_COLOR := Color(0.9, 0.9, 0.9)
@@ -88,6 +91,18 @@ func _ready() -> void:
 
 	# Initial calculation
 	_calculate_dimensions()
+
+	# Enable input handling for focus
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+func _gui_input(event: InputEvent) -> void:
+	# Request focus when clicked
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			focus_requested.emit()
+			accept_event()
 
 
 func _process(delta: float) -> void:

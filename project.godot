@@ -23,6 +23,7 @@ PanelRegistry="*res://scripts/panel_registry.gd"
 BridgeLauncher="*res://scripts/bridge_launcher.gd"
 BridgeClient="*res://scripts/bridge_client.gd"
 AgentOrchestrator="*res://scripts/agent_orchestrator.gd"
+InputRouter="*res://scripts/input_router.gd"
 
 [editor_plugins]
 

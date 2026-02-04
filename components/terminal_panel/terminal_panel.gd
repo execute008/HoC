@@ -22,6 +22,12 @@ signal agent_state_changed(state: int)
 ## Emitted when bound agent exits
 signal agent_exited(exit_code: int, reason: String)
 
+## Emitted when terminal receives focus
+signal terminal_focused
+
+## Emitted when terminal loses focus
+signal terminal_unfocused
+
 
 @export_group("Terminal")
 
@@ -75,6 +81,9 @@ var _agent_state: int = -1  # -1 = unbound, otherwise AgentOrchestrator.AgentSta
 var _status_indicator: Control = null
 var _was_at_bottom: bool = true
 
+# Input routing
+var _input_router: Node = null
+
 
 func _ready() -> void:
 	# Set terminal-specific defaults before parent _ready
@@ -96,9 +105,14 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		_find_controllers()
 		_connect_agent_orchestrator()
+		_connect_input_router()
 
 		# Create output callback
 		_output_callback = _on_agent_output
+
+		# Connect to panel interaction signals for focus handling
+		grabbed.connect(_on_panel_grabbed)
+		released.connect(_on_panel_released)
 
 
 func _process(delta: float) -> void:
@@ -129,6 +143,7 @@ func _connect_terminal_content() -> void:
 		_terminal_content.background_color = terminal_background
 		_terminal_content.cursor_color = terminal_cursor_color
 		_terminal_content.content_changed.connect(_on_terminal_content_changed)
+		_terminal_content.focus_requested.connect(_on_terminal_focus_requested)
 
 
 func _find_controllers() -> void:
@@ -187,6 +202,27 @@ func _connect_agent_orchestrator() -> void:
 	_agent_orchestrator.agent_state_changed.connect(_on_orchestrator_agent_state_changed)
 	_agent_orchestrator.agent_exit.connect(_on_orchestrator_agent_exit)
 	_agent_orchestrator.agent_removed.connect(_on_orchestrator_agent_removed)
+
+
+func _connect_input_router() -> void:
+	_input_router = get_node_or_null("/root/InputRouter")
+	if not _input_router:
+		push_warning("TerminalPanel: InputRouter autoload not found")
+
+
+func _on_panel_grabbed(by: Node3D) -> void:
+	# Request focus when panel is grabbed
+	request_focus()
+
+
+func _on_panel_released() -> void:
+	# Keep focus after release - user explicitly grabbed this panel
+	pass
+
+
+func _on_terminal_focus_requested() -> void:
+	# Request focus when terminal content is clicked/tapped
+	request_focus()
 
 
 func _on_orchestrator_agent_state_changed(agent_id: String, old_state: int, new_state: int) -> void:
@@ -508,9 +544,16 @@ func scroll_to_top() -> void:
 
 ## Set terminal focus state (enables controller scrolling and cursor)
 func set_terminal_focused(focused: bool) -> void:
+	var was_focused := _is_terminal_focused
 	_is_terminal_focused = focused
 	if _terminal_content:
 		_terminal_content.set_focused(focused)
+
+	# Emit signals for focus state change
+	if focused and not was_focused:
+		terminal_focused.emit()
+	elif not focused and was_focused:
+		terminal_unfocused.emit()
 
 
 ## Check if terminal is focused
@@ -606,3 +649,38 @@ func set_terminal_cursor_color(value: Color) -> void:
 	terminal_cursor_color = value
 	if _terminal_content:
 		_terminal_content.cursor_color = value
+
+
+# =============================================================================
+# Focus Management
+# =============================================================================
+
+## Request focus for this terminal panel.
+## This will route keyboard input to this panel's bound agent.
+func request_focus() -> void:
+	if _input_router:
+		_input_router.set_focused_panel(self)
+		terminal_focused.emit()
+
+
+## Release focus from this terminal panel.
+func release_focus() -> void:
+	if _input_router and _input_router.is_panel_focused(self):
+		_input_router.clear_focus()
+		terminal_unfocused.emit()
+
+
+## Check if this terminal panel has input focus.
+func has_input_focus() -> bool:
+	if _input_router:
+		return _input_router.is_panel_focused(self)
+	return false
+
+
+## Send keyboard interrupt (Ctrl+C) to bound agent.
+func send_interrupt() -> Error:
+	if _bound_agent_id == "" or not _agent_orchestrator:
+		return ERR_UNCONFIGURED
+
+	# Send ETX character (Ctrl+C)
+	return _agent_orchestrator.send_input(_bound_agent_id, "\u0003")
