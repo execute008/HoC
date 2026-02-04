@@ -6,6 +6,7 @@
 mod agent;
 mod config;
 mod git;
+mod pty;
 mod server;
 
 use std::sync::Arc;
