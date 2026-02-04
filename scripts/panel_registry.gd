@@ -343,3 +343,26 @@ func focus_agent_panel(agent_id: String) -> bool:
 		terminal_panel.request_focus()
 		return true
 	return false
+
+
+## Get panel statistics for performance monitoring
+func get_panel_stats() -> Dictionary:
+	var panels := get_all_panels()
+	var terminal_count := 0
+	var throttled_count := 0
+	var total_pending_output := 0
+
+	for panel in panels:
+		if panel is TerminalPanel:
+			terminal_count += 1
+			var terminal_panel: TerminalPanel = panel
+			if terminal_panel.is_update_throttled():
+				throttled_count += 1
+			total_pending_output += terminal_panel.get_pending_output_size()
+
+	return {
+		"total_panels": panels.size(),
+		"terminal_panels": terminal_count,
+		"throttled_panels": throttled_count,
+		"pending_output_bytes": total_pending_output
+	}

@@ -6,6 +6,11 @@ extends Control
 ##
 ## This Control renders terminal output with monospace text, ANSI color codes,
 ## line wrapping, scrollback buffer, and a text cursor.
+##
+## Performance optimizations:
+## - Dirty region tracking to minimize redraws
+## - Frame-gated output processing
+## - Update throttling for distant panels
 
 
 ## Emitted when the terminal requests scroll input (for VR controller integration)
@@ -24,6 +29,12 @@ const DEFAULT_BG_COLOR := Color(0.1, 0.1, 0.12, 1.0)
 
 ## Cursor blink rate in seconds
 const CURSOR_BLINK_RATE := 0.5
+
+## Maximum lines to render per frame for performance
+const MAX_LINES_PER_FRAME := 50
+
+## Output buffer size limit
+const OUTPUT_BUFFER_LIMIT := 32768
 
 
 ## Scrollback buffer size (number of lines to keep)
@@ -59,6 +70,15 @@ var _visible_rows: int = 0
 var _saved_cursor_row: int = 0
 var _saved_cursor_col: int = 0
 var _is_focused: bool = false
+
+# Performance optimization state
+var _dirty_lines: PackedInt32Array = PackedInt32Array()
+var _full_redraw_needed: bool = true
+var _output_buffer: String = ""
+var _is_throttled: bool = false
+var _last_content_hash: int = 0
+var _frames_since_update: int = 0
+var _update_throttle_frames: int = 0
 
 
 ## Represents a single line in the terminal with styled spans
@@ -106,12 +126,19 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
-	if show_cursor:
+	_frames_since_update += 1
+
+	# Process buffered output if not throttled
+	if not _is_throttled and not _output_buffer.is_empty():
+		_process_buffered_output()
+
+	# Handle cursor blinking (only if focused and not throttled)
+	if show_cursor and _is_focused and not _is_throttled:
 		_cursor_blink_timer += delta
 		if _cursor_blink_timer >= CURSOR_BLINK_RATE:
 			_cursor_blink_timer = 0.0
 			_cursor_visible = not _cursor_visible
-			queue_redraw()
+			_mark_cursor_dirty()
 
 
 func _draw() -> void:
@@ -125,20 +152,41 @@ func _draw() -> void:
 	var start_line := _scroll_offset
 	var end_line := mini(start_line + _visible_rows, _lines.size())
 
-	# Draw each visible line
-	for line_idx in range(start_line, end_line):
-		var line := _lines[line_idx]
-		var x_offset := 0.0
+	# Limit lines per frame for performance if many lines need drawing
+	var lines_to_draw := end_line - start_line
+	if lines_to_draw > MAX_LINES_PER_FRAME and not _full_redraw_needed:
+		# Only draw dirty lines
+		for line_idx in _dirty_lines:
+			if line_idx >= start_line and line_idx < end_line:
+				var screen_row := line_idx - start_line
+				var line_y := screen_row * _char_size.y
+				_draw_line_at(_lines[line_idx], line_y)
+	else:
+		# Draw all visible lines (normal case)
+		for line_idx in range(start_line, end_line):
+			var line := _lines[line_idx]
+			var x_offset := 0.0
 
-		for span in line.spans:
-			_draw_span(span, Vector2(x_offset, y_offset))
-			x_offset += span.text.length() * _char_size.x
+			for span in line.spans:
+				_draw_span(span, Vector2(x_offset, y_offset))
+				x_offset += span.text.length() * _char_size.x
 
-		y_offset += _char_size.y
+			y_offset += _char_size.y
+
+	# Clear dirty state after draw
+	_dirty_lines.clear()
+	_full_redraw_needed = false
 
 	# Draw cursor
 	if show_cursor and _cursor_visible and _is_cursor_visible():
 		_draw_cursor()
+
+
+func _draw_line_at(line: TerminalLine, y_offset: float) -> void:
+	var x_offset := 0.0
+	for span in line.spans:
+		_draw_span(span, Vector2(x_offset, y_offset))
+		x_offset += span.text.length() * _char_size.x
 
 
 func _draw_span(span: AnsiParser.TextSpan, position: Vector2) -> void:
@@ -276,7 +324,47 @@ func _on_resized() -> void:
 
 
 ## Write text to the terminal (with ANSI parsing)
+## Uses buffered output to prevent frame drops during bursts
 func write(text: String) -> void:
+	# Buffer the output for frame-gated processing
+	_output_buffer += text
+
+	# Limit buffer size to prevent memory issues
+	if _output_buffer.length() > OUTPUT_BUFFER_LIMIT:
+		# Force process excess data
+		_process_buffered_output_immediate()
+	elif not _is_throttled:
+		# Process immediately if not throttled and buffer is small
+		if _output_buffer.length() < 1024:
+			_process_buffered_output_immediate()
+
+
+## Process buffered output with frame budget limiting
+func _process_buffered_output() -> void:
+	if _output_buffer.is_empty():
+		return
+
+	# Limit bytes processed per frame
+	var bytes_to_process := mini(_output_buffer.length(), 4096)
+	var chunk := _output_buffer.substr(0, bytes_to_process)
+	_output_buffer = _output_buffer.substr(bytes_to_process)
+
+	_write_text_internal(chunk)
+
+
+## Process all buffered output immediately (for flush/force scenarios)
+func _process_buffered_output_immediate() -> void:
+	if _output_buffer.is_empty():
+		return
+
+	_write_text_internal(_output_buffer)
+	_output_buffer = ""
+
+
+## Internal write implementation
+func _write_text_internal(text: String) -> void:
+	var start_row := _cursor_row
+
 	var parse_result := _ansi_parser.parse(text)
 
 	# Process clear commands first
@@ -291,10 +379,27 @@ func write(text: String) -> void:
 	for span in parse_result.spans:
 		_write_span(span)
 
+	# Mark affected lines as dirty
+	var end_row := _cursor_row
+	for i in range(start_row, end_row + 1):
+		_mark_line_dirty(i)
+
 	_trim_scrollback()
 	_scroll_to_cursor()
 	queue_redraw()
 	content_changed.emit()
+
+
+## Mark a specific line as needing redraw
+func _mark_line_dirty(line_idx: int) -> void:
+	if line_idx not in _dirty_lines:
+		_dirty_lines.append(line_idx)
+
+
+## Mark cursor area as dirty
+func _mark_cursor_dirty() -> void:
+	_mark_line_dirty(_cursor_row)
+	queue_redraw()
 
 
 func _write_span(span: AnsiParser.TextSpan) -> void:
@@ -533,6 +638,9 @@ func writeln(text: String) -> void:
 func clear() -> void:
 	_initialize_buffer()
 	_ansi_parser.reset()
+	_output_buffer = ""
+	_dirty_lines.clear()
+	_full_redraw_needed = true
 	queue_redraw()
 	content_changed.emit()
 
@@ -630,4 +738,38 @@ func set_show_cursor(value: bool) -> void:
 
 func set_background_color(value: Color) -> void:
 	background_color = value
+	_full_redraw_needed = true
+	queue_redraw()
+
+
+# =============================================================================
+# Performance Optimization API
+# =============================================================================
+
+## Set update throttling state (called by PerformanceManager for distant panels)
+func set_update_throttled(throttled: bool) -> void:
+	_is_throttled = throttled
+	if not throttled and not _output_buffer.is_empty():
+		# Process any pending output when unthrottled
+		queue_redraw()
+
+
+## Check if terminal is currently throttled
+func is_update_throttled() -> bool:
+	return _is_throttled
+
+
+## Get pending output buffer size
+func get_pending_output_size() -> int:
+	return _output_buffer.length()
+
+
+## Force flush all pending output
+func flush_output() -> void:
+	_process_buffered_output_immediate()
+
+
+## Request full redraw on next frame
+func request_full_redraw() -> void:
+	_full_redraw_needed = true
 	queue_redraw()

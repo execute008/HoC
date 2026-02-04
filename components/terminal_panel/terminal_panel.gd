@@ -10,6 +10,9 @@ extends WorkspacePanel
 ## Supports binding to agent sessions for real-time output display.
 
 
+const OutputBufferScript = preload("res://scripts/output_buffer.gd")
+
+
 ## Emitted when terminal content is updated
 signal content_updated
 
@@ -65,6 +68,14 @@ signal terminal_unfocused
 ## Show status indicator for agent state
 @export var show_status_indicator: bool = true
 
+@export_group("Performance")
+
+## Enable output buffering for smoother performance
+@export var enable_output_buffering: bool = true
+
+## Maximum bytes to process per frame
+@export var max_output_per_frame: int = 4096
+
 
 # Internal state
 var _terminal_content: TerminalContent = null
@@ -83,6 +94,11 @@ var _was_at_bottom: bool = true
 
 # Input routing
 var _input_router: Node = null
+
+# Performance optimization state
+var _output_buffer: RefCounted = null  # OutputBuffer instance
+var _is_update_throttled: bool = false
+var _performance_manager: Node = null
 
 
 func _ready() -> void:
@@ -106,9 +122,14 @@ func _ready() -> void:
 		_find_controllers()
 		_connect_agent_orchestrator()
 		_connect_input_router()
+		_connect_performance_manager()
 
 		# Create output callback
 		_output_callback = _on_agent_output
+
+		# Initialize output buffer with callback
+		if enable_output_buffering:
+			_output_buffer = OutputBufferScript.new(_flush_buffered_output)
 
 		# Connect to panel interaction signals for focus handling
 		grabbed.connect(_on_panel_grabbed)
@@ -120,6 +141,10 @@ func _process(delta: float) -> void:
 
 	if Engine.is_editor_hint():
 		return
+
+	# Process buffered output (frame-gated)
+	if _output_buffer and not _is_update_throttled:
+		_output_buffer.process_frame()
 
 	# Handle VR controller scrolling when focused
 	if _is_terminal_focused:
@@ -210,6 +235,11 @@ func _connect_input_router() -> void:
 		push_warning("TerminalPanel: InputRouter autoload not found")
 
 
+func _connect_performance_manager() -> void:
+	_performance_manager = get_node_or_null("/root/PerformanceManager")
+	# Performance manager is optional - graceful fallback if not present
+
+
 func _on_panel_grabbed(by: Node3D) -> void:
 	# Request focus when panel is grabbed
 	request_focus()
@@ -253,6 +283,20 @@ func _on_agent_output(data: String) -> void:
 	# Track if we're at the bottom before writing
 	_was_at_bottom = is_at_bottom()
 
+	if enable_output_buffering and _output_buffer:
+		# Buffer the output for frame-gated processing
+		_output_buffer.append(data)
+	else:
+		# Write immediately (legacy behavior)
+		write(data)
+
+		# Auto-scroll to bottom if we were already at the bottom
+		if auto_scroll and _was_at_bottom:
+			scroll_to_bottom()
+
+
+## Callback for flushing buffered output
+func _flush_buffered_output(data: String) -> void:
 	# Write data to terminal with ANSI parsing
 	write(data)
 
@@ -684,3 +728,47 @@ func send_interrupt() -> Error:
 
 	# Send ETX character (Ctrl+C)
 	return _agent_orchestrator.send_input(_bound_agent_id, "\u0003")
+
+
+# =============================================================================
+# Performance Optimization API
+# =============================================================================
+
+## Set update throttling state (called by PerformanceManager for distant panels)
+func set_update_throttled(throttled: bool) -> void:
+	_is_update_throttled = throttled
+	if _terminal_content:
+		_terminal_content.set_update_throttled(throttled)
+
+
+## Check if panel updates are throttled
+func is_update_throttled() -> bool:
+	return _is_update_throttled
+
+
+## Get pending output buffer size
+func get_pending_output_size() -> int:
+	if _output_buffer:
+		return _output_buffer.get_buffer_size()
+	elif _terminal_content:
+		return _terminal_content.get_pending_output_size()
+	return 0
+
+
+## Force flush all pending output
+func flush_output() -> void:
+	if _output_buffer:
+		_output_buffer.flush_immediate()
+	if _terminal_content:
+		_terminal_content.flush_output()
+
+
+## Get buffer statistics
+func get_buffer_stats() -> Dictionary:
+	var stats := {}
+	if _output_buffer:
+		stats["panel_buffer"] = _output_buffer.get_stats()
+	if _terminal_content:
+		stats["terminal_pending"] = _terminal_content.get_pending_output_size()
+	stats["throttled"] = _is_update_throttled
+	return stats
