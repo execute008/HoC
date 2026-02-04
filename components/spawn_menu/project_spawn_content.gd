@@ -405,6 +405,10 @@ func _format_time_ago(timestamp: int) -> String:
 # =============================================================================
 
 func _populate_presets() -> void:
+	_populate_presets_for_project(_selected_path)
+
+
+func _populate_presets_for_project(project_path: String) -> void:
 	# Clear existing
 	for child in _preset_container.get_children():
 		child.queue_free()
@@ -413,7 +417,19 @@ func _populate_presets() -> void:
 		_create_preset_button("default", "Default", "", true)
 		return
 
-	var presets: Array = _project_config.get_presets()
+	# Get presets - use project-specific if path is selected, otherwise global
+	var presets: Array
+	var default_preset_name: String = "default"
+
+	if project_path != "" and DirAccess.dir_exists_absolute(project_path):
+		presets = _project_config.get_presets_for_project(project_path)
+		default_preset_name = _project_config.get_default_preset_name(project_path)
+	else:
+		presets = _project_config.get_presets()
+
+	# If no preset is selected yet, use the default
+	if _selected_preset == "" or _selected_preset == "default":
+		_selected_preset = default_preset_name
 
 	for preset in presets:
 		var is_selected := preset.name == _selected_preset
@@ -566,6 +582,9 @@ func _on_recent_project_selected(path: String, preset: String) -> void:
 	_selected_path = path
 	_path_input.text = path
 
+	# Refresh presets for the new project
+	_populate_presets_for_project(path)
+
 	if preset != "":
 		_update_preset_selection(preset)
 
@@ -574,7 +593,13 @@ func _on_recent_project_selected(path: String, preset: String) -> void:
 
 
 func _on_path_text_changed(new_text: String) -> void:
+	var old_path := _selected_path
 	_selected_path = new_text.strip_edges()
+
+	# Refresh presets if path changed to a valid directory
+	if _selected_path != old_path and DirAccess.dir_exists_absolute(_selected_path):
+		_populate_presets_for_project(_selected_path)
+
 	_update_spawn_button_state()
 	_clear_error()
 
@@ -602,6 +627,10 @@ func _on_browse_button_pressed() -> void:
 func _on_directory_selected(dir: String) -> void:
 	_selected_path = dir
 	_path_input.text = dir
+
+	# Refresh presets for the new project
+	_populate_presets_for_project(dir)
+
 	_update_spawn_button_state()
 	_clear_error()
 

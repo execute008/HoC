@@ -578,13 +578,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_write() {
-        let process = PtyProcess::spawn(
-            "cat",
-            &[],
-            Path::new("/tmp"),
-            None,
-            TerminalSize::default(),
-        );
+        let process =
+            PtyProcess::spawn("cat", &[], Path::new("/tmp"), None, TerminalSize::default());
 
         assert!(process.is_ok());
         let mut process = process.unwrap();
@@ -600,13 +595,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_resize() {
-        let process = PtyProcess::spawn(
-            "cat",
-            &[],
-            Path::new("/tmp"),
-            None,
-            TerminalSize::default(),
-        );
+        let process =
+            PtyProcess::spawn("cat", &[], Path::new("/tmp"), None, TerminalSize::default());
 
         assert!(process.is_ok());
         let process = process.unwrap();
@@ -628,13 +618,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_kill() {
-        let process = PtyProcess::spawn(
-            "cat",
-            &[],
-            Path::new("/tmp"),
-            None,
-            TerminalSize::default(),
-        );
+        let process =
+            PtyProcess::spawn("cat", &[], Path::new("/tmp"), None, TerminalSize::default());
 
         assert!(process.is_ok());
         let process = process.unwrap();

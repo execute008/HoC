@@ -66,8 +66,12 @@ pub struct SpawnConfig {
     pub cols: u16,
     /// Terminal rows
     pub rows: u16,
-    /// Optional preset name (unused currently, for future expansion)
+    /// Optional preset name
     pub preset: Option<String>,
+    /// Command-line arguments for the agent
+    pub args: Vec<String>,
+    /// Initial prompt to send after spawn
+    pub initial_prompt: Option<String>,
 }
 
 impl SpawnConfig {
@@ -78,6 +82,8 @@ impl SpawnConfig {
             cols: 80,
             rows: 24,
             preset: None,
+            args: Vec::new(),
+            initial_prompt: None,
         }
     }
 
@@ -93,6 +99,18 @@ impl SpawnConfig {
         self.preset = Some(preset.into());
         self
     }
+
+    /// Set command-line arguments
+    pub fn with_args(mut self, args: Vec<String>) -> Self {
+        self.args = args;
+        self
+    }
+
+    /// Set initial prompt
+    pub fn with_initial_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.initial_prompt = Some(prompt.into());
+        self
+    }
 }
 
 /// Represents a single agent session with full lifecycle management
@@ -104,6 +122,10 @@ pub struct AgentSession {
     /// Terminal dimensions
     cols: u16,
     rows: u16,
+    /// Command-line arguments for the agent
+    args: Vec<String>,
+    /// Initial prompt to send after spawn
+    initial_prompt: Option<String>,
     /// Current state of the agent
     state: Arc<RwLock<AgentState>>,
     /// The PTY process (when running)
@@ -128,6 +150,8 @@ impl AgentSession {
             project_path: project_path.into(),
             cols: 80,
             rows: 24,
+            args: Vec::new(),
+            initial_prompt: None,
             state: Arc::new(RwLock::new(AgentState::Stopped)),
             process: Arc::new(RwLock::new(None)),
             output_tx,
@@ -147,6 +171,8 @@ impl AgentSession {
             project_path: config.project_path,
             cols: config.cols,
             rows: config.rows,
+            args: config.args,
+            initial_prompt: config.initial_prompt,
             state: Arc::new(RwLock::new(AgentState::Stopped)),
             process: Arc::new(RwLock::new(None)),
             output_tx,
@@ -220,11 +246,11 @@ impl AgentSession {
         // Update state to starting
         *self.state.write().await = AgentState::Starting;
 
-        // Spawn the claude command
+        // Spawn the claude command with args from preset
         let size = TerminalSize::new(self.cols, self.rows);
         let process = PtyProcess::spawn(
             "claude",
-            &[], // No args - claude will start in interactive mode
+            &self.args,
             project_path,
             None, // No additional env vars
             size,
@@ -240,7 +266,34 @@ impl AgentSession {
         // Start the output forwarding task
         self.start_output_forwarder().await;
 
+        // Send initial prompt if specified (after a short delay to let agent initialize)
+        if let Some(ref prompt) = self.initial_prompt {
+            if !prompt.is_empty() {
+                let prompt_clone = prompt.clone();
+                let process_clone = Arc::clone(&self.process);
+                tokio::spawn(async move {
+                    // Wait for agent to be ready (500ms should be enough for most cases)
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    let proc_guard = process_clone.read().await;
+                    if let Some(ref process) = *proc_guard {
+                        // Send the initial prompt followed by newline
+                        let _ = process.write_str(&format!("{}\n", prompt_clone)).await;
+                    }
+                });
+            }
+        }
+
         Ok(())
+    }
+
+    /// Get the initial prompt if set
+    pub fn initial_prompt(&self) -> Option<&str> {
+        self.initial_prompt.as_deref()
+    }
+
+    /// Get the command arguments
+    pub fn args(&self) -> &[String] {
+        &self.args
     }
 
     /// Start the background task that forwards PTY output to subscribers
@@ -319,7 +372,10 @@ impl AgentSession {
     pub async fn resize(&mut self, cols: u16, rows: u16) -> SessionResult<()> {
         let proc_guard = self.process.read().await;
         if let Some(ref process) = *proc_guard {
-            process.resize(cols, rows).await.map_err(SessionError::PtyError)?;
+            process
+                .resize(cols, rows)
+                .await
+                .map_err(SessionError::PtyError)?;
             self.cols = cols;
             self.rows = rows;
             Ok(())
@@ -413,6 +469,8 @@ mod tests {
         assert_eq!(config.cols, 80);
         assert_eq!(config.rows, 24);
         assert!(config.preset.is_none());
+        assert!(config.args.is_empty());
+        assert!(config.initial_prompt.is_none());
     }
 
     #[test]
@@ -426,6 +484,19 @@ mod tests {
     fn test_spawn_config_with_preset() {
         let config = SpawnConfig::new("/test/path").with_preset("code-review");
         assert_eq!(config.preset, Some("code-review".to_string()));
+    }
+
+    #[test]
+    fn test_spawn_config_with_args() {
+        let config = SpawnConfig::new("/test/path")
+            .with_args(vec!["--verbose".to_string(), "-p".to_string()]);
+        assert_eq!(config.args, vec!["--verbose", "-p"]);
+    }
+
+    #[test]
+    fn test_spawn_config_with_initial_prompt() {
+        let config = SpawnConfig::new("/test/path").with_initial_prompt("npm test");
+        assert_eq!(config.initial_prompt, Some("npm test".to_string()));
     }
 
     #[test]

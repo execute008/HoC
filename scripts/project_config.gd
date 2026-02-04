@@ -80,6 +80,8 @@ class Preset:
 	var cols: int
 	var rows: int
 	var env_vars: Dictionary
+	var args: PackedStringArray  ## Command-line arguments for the agent
+	var initial_prompt: String  ## Initial prompt to send after spawn
 
 	func _init(p_name: String = "default") -> void:
 		name = p_name
@@ -88,6 +90,8 @@ class Preset:
 		cols = 80
 		rows = 24
 		env_vars = {}
+		args = PackedStringArray()
+		initial_prompt = ""
 
 	func to_dict() -> Dictionary:
 		return {
@@ -96,7 +100,9 @@ class Preset:
 			"icon": icon,
 			"cols": cols,
 			"rows": rows,
-			"env_vars": env_vars
+			"env_vars": env_vars,
+			"args": Array(args),
+			"initial_prompt": initial_prompt
 		}
 
 	static func from_dict(data: Dictionary) -> Preset:
@@ -106,6 +112,10 @@ class Preset:
 		preset.cols = data.get("cols", 80)
 		preset.rows = data.get("rows", 24)
 		preset.env_vars = data.get("env_vars", {})
+		var args_array: Array = data.get("args", [])
+		for arg in args_array:
+			preset.args.append(str(arg))
+		preset.initial_prompt = data.get("initial_prompt", "")
 		return preset
 
 
@@ -349,3 +359,214 @@ func _init_default_presets() -> void:
 	_presets["compact"] = compact_preset
 
 	_save_config()
+
+
+# =============================================================================
+# Public API - Project-Specific Presets
+# =============================================================================
+
+## Project-specific presets cache (project_path -> Array[Preset])
+var _project_presets_cache: Dictionary = {}
+
+## Default preset name for a project (project_path -> String)
+var _project_default_preset: Dictionary = {}
+
+
+## Load presets from a project's .hoc/config.toml file
+## Returns an array of project-specific presets, or empty if none found
+func load_project_presets(project_path: String) -> Array[Preset]:
+	# Check cache first
+	if _project_presets_cache.has(project_path):
+		return _project_presets_cache[project_path]
+
+	var result: Array[Preset] = []
+	var config_path := project_path.path_join(".hoc").path_join("config.toml")
+
+	if not FileAccess.file_exists(config_path):
+		_project_presets_cache[project_path] = result
+		return result
+
+	var file := FileAccess.open(config_path, FileAccess.READ)
+	if not file:
+		push_warning("ProjectConfig: Failed to open project config: %s" % config_path)
+		_project_presets_cache[project_path] = result
+		return result
+
+	var toml_text := file.get_as_text()
+	file.close()
+
+	# Parse TOML manually (simple parser for our specific format)
+	result = _parse_toml_presets(toml_text)
+
+	# Parse default preset name
+	_project_default_preset[project_path] = _parse_toml_default_preset(toml_text)
+
+	_project_presets_cache[project_path] = result
+	return result
+
+
+## Get project presets combined with global presets
+## Project presets take precedence over global ones with same name
+func get_presets_for_project(project_path: String) -> Array[Preset]:
+	var project_presets := load_project_presets(project_path)
+	var result: Array[Preset] = []
+	var seen_names: Dictionary = {}
+
+	# Add project presets first (they take precedence)
+	for preset in project_presets:
+		result.append(preset)
+		seen_names[preset.name] = true
+
+	# Add global presets that aren't overridden
+	for preset in _presets.values():
+		if not seen_names.has(preset.name):
+			result.append(preset)
+
+	return result
+
+
+## Get the default preset name for a project
+## Returns the project's default if set, otherwise "default"
+func get_default_preset_name(project_path: String) -> String:
+	# Ensure project presets are loaded
+	load_project_presets(project_path)
+
+	if _project_default_preset.has(project_path):
+		var default_name: String = _project_default_preset[project_path]
+		if default_name != "":
+			return default_name
+
+	return "default"
+
+
+## Clear the project presets cache (call when project config may have changed)
+func clear_project_cache(project_path: String = "") -> void:
+	if project_path == "":
+		_project_presets_cache.clear()
+		_project_default_preset.clear()
+	else:
+		_project_presets_cache.erase(project_path)
+		_project_default_preset.erase(project_path)
+
+
+## Parse TOML preset entries from config text
+func _parse_toml_presets(toml_text: String) -> Array[Preset]:
+	var result: Array[Preset] = []
+	var lines := toml_text.split("\n")
+
+	var current_preset: Preset = null
+	var in_preset := false
+
+	for line in lines:
+		var trimmed := line.strip_edges()
+
+		# Skip empty lines and comments
+		if trimmed == "" or trimmed.begins_with("#"):
+			continue
+
+		# Check for [[presets]] section header
+		if trimmed == "[[presets]]":
+			# Save previous preset if exists
+			if current_preset != null:
+				result.append(current_preset)
+			current_preset = Preset.new()
+			in_preset = true
+			continue
+
+		# Check for other section headers (ends current preset)
+		if trimmed.begins_with("[") and trimmed != "[[presets]]":
+			if current_preset != null:
+				result.append(current_preset)
+				current_preset = null
+			in_preset = false
+			continue
+
+		# Parse key-value pairs in preset section
+		if in_preset and current_preset != null:
+			var eq_pos := trimmed.find("=")
+			if eq_pos > 0:
+				var key := trimmed.substr(0, eq_pos).strip_edges()
+				var value := trimmed.substr(eq_pos + 1).strip_edges()
+
+				match key:
+					"name":
+						current_preset.name = _parse_toml_string(value)
+					"description":
+						current_preset.description = _parse_toml_string(value)
+					"icon":
+						current_preset.icon = _parse_toml_string(value)
+					"cols":
+						current_preset.cols = int(value)
+					"rows":
+						current_preset.rows = int(value)
+					"initial_prompt":
+						current_preset.initial_prompt = _parse_toml_string(value)
+					"args":
+						current_preset.args = _parse_toml_string_array(value)
+
+	# Don't forget the last preset
+	if current_preset != null:
+		result.append(current_preset)
+
+	return result
+
+
+## Parse default_preset from TOML config
+func _parse_toml_default_preset(toml_text: String) -> String:
+	var lines := toml_text.split("\n")
+	var in_default_section := false
+
+	for line in lines:
+		var trimmed := line.strip_edges()
+
+		if trimmed == "" or trimmed.begins_with("#"):
+			continue
+
+		# Check for [default_preset] section
+		if trimmed == "[default_preset]":
+			in_default_section = true
+			continue
+
+		# Other sections end default_preset section
+		if trimmed.begins_with("["):
+			in_default_section = false
+			continue
+
+		if in_default_section:
+			var eq_pos := trimmed.find("=")
+			if eq_pos > 0:
+				var key := trimmed.substr(0, eq_pos).strip_edges()
+				var value := trimmed.substr(eq_pos + 1).strip_edges()
+				if key == "name":
+					return _parse_toml_string(value)
+
+	return ""
+
+
+## Parse a TOML string value (remove quotes)
+func _parse_toml_string(value: String) -> String:
+	var v := value.strip_edges()
+	if v.begins_with("\"") and v.ends_with("\""):
+		return v.substr(1, v.length() - 2)
+	if v.begins_with("'") and v.ends_with("'"):
+		return v.substr(1, v.length() - 2)
+	return v
+
+
+## Parse a TOML array of strings
+func _parse_toml_string_array(value: String) -> PackedStringArray:
+	var result := PackedStringArray()
+	var v := value.strip_edges()
+
+	# Remove brackets
+	if v.begins_with("[") and v.ends_with("]"):
+		v = v.substr(1, v.length() - 2)
+
+	# Split by comma and parse each element
+	var parts := v.split(",")
+	for part in parts:
+		var trimmed := part.strip_edges()
+		if trimmed != "":
+			result.append(_parse_toml_string(trimmed))
+
+	return result

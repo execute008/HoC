@@ -841,10 +841,7 @@ mod tests {
         let json = r#"{"version": 0, "type": "ping", "seq": 1}"#;
         let result = ClientEnvelope::from_json(json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("not supported"));
+        assert!(result.unwrap_err().to_string().contains("not supported"));
     }
 
     // -------------------------------------------------------------------------
@@ -941,9 +938,13 @@ mod tests {
         // All these should validate successfully
         assert!(ClientMessage::ping(1).validate().is_ok());
         assert!(ClientMessage::spawn_agent("/valid/path").validate().is_ok());
-        assert!(ClientMessage::agent_input(agent_id, "hello").validate().is_ok());
+        assert!(ClientMessage::agent_input(agent_id, "hello")
+            .validate()
+            .is_ok());
         assert!(ClientMessage::kill_agent(agent_id).validate().is_ok());
-        assert!(ClientMessage::resize_terminal(agent_id, 80, 24).validate().is_ok());
+        assert!(ClientMessage::resize_terminal(agent_id, 80, 24)
+            .validate()
+            .is_ok());
         assert!(ClientMessage::ListAgents.validate().is_ok());
     }
 
@@ -993,8 +994,7 @@ mod tests {
     #[test]
     fn test_parse_full_spawn_agent() {
         // Test that we can parse a full spawn_agent with all fields
-        let json =
-            r#"{"type": "spawn_agent", "project_path": "/test", "preset": "dev", "cols": 120, "rows": 40}"#;
+        let json = r#"{"type": "spawn_agent", "project_path": "/test", "preset": "dev", "cols": 120, "rows": 40}"#;
         let msg: ClientMessage = serde_json::from_str(json).unwrap();
         match msg {
             ClientMessage::SpawnAgent {

@@ -50,10 +50,7 @@ pub fn list_worktrees(repo: &Repository) -> Result<Vec<WorktreeInfo>, GitError> 
     // Add main worktree
     if let Some(workdir) = repo.workdir() {
         let head = repo.head().ok();
-        let branch = head
-            .as_ref()
-            .and_then(|h| h.shorthand())
-            .map(String::from);
+        let branch = head.as_ref().and_then(|h| h.shorthand()).map(String::from);
 
         result.push(WorktreeInfo {
             path: workdir.display().to_string(),
@@ -95,7 +92,9 @@ pub fn create_worktree(
 ) -> Result<WorktreeInfo, GitError> {
     // Validate worktree path
     if worktree_path.as_os_str().is_empty() {
-        return Err(GitError::InvalidPath("Worktree path cannot be empty".into()));
+        return Err(GitError::InvalidPath(
+            "Worktree path cannot be empty".into(),
+        ));
     }
 
     // Check if worktree already exists at this path
@@ -135,7 +134,11 @@ pub fn create_worktree(
     let reference = branch.into_reference();
 
     // Create the worktree
-    repo.worktree(worktree_name, worktree_path, Some(git2::WorktreeAddOptions::new().reference(Some(&reference))))?;
+    repo.worktree(
+        worktree_name,
+        worktree_path,
+        Some(git2::WorktreeAddOptions::new().reference(Some(&reference))),
+    )?;
 
     Ok(WorktreeInfo {
         path: worktree_path.display().to_string(),
@@ -156,9 +159,9 @@ mod tests {
 
         // Create an initial commit so we have a valid HEAD
         {
-            let signature = repo.signature().unwrap_or_else(|_| {
-                git2::Signature::now("Test", "test@example.com").unwrap()
-            });
+            let signature = repo
+                .signature()
+                .unwrap_or_else(|_| git2::Signature::now("Test", "test@example.com").unwrap());
             let tree_id = repo.index().unwrap().write_tree().unwrap();
             let tree = repo.find_tree(tree_id).unwrap();
             repo.commit(
@@ -208,7 +211,9 @@ mod tests {
 
         assert_eq!(worktrees.len(), 1);
         assert!(worktrees[0].is_main);
-        assert!(worktrees[0].path.contains(temp_dir.path().to_str().unwrap()));
+        assert!(worktrees[0]
+            .path
+            .contains(temp_dir.path().to_str().unwrap()));
     }
 
     #[test]

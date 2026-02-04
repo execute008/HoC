@@ -59,10 +59,7 @@ async fn main() -> anyhow::Result<()> {
         .compact()
         .init();
 
-    info!(
-        "Halls of Creation Bridge v{}",
-        env!("CARGO_PKG_VERSION")
-    );
+    info!("Halls of Creation Bridge v{}", env!("CARGO_PKG_VERSION"));
 
     if args.token.is_some() {
         info!("Token authentication enabled");
