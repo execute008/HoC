@@ -9,5 +9,7 @@ mod protocol;
 mod websocket;
 
 #[allow(unused_imports)]
-pub use protocol::{ClientMessage, ServerMessage, PROTOCOL_VERSION};
+pub use protocol::{
+    AgentInfo, AgentState, ClientMessage, ErrorCode, ServerMessage, PROTOCOL_VERSION,
+};
 pub use websocket::{ServerConfig, WebSocketServer};
