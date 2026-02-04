@@ -9,6 +9,7 @@ extends Node
 
 const ProjectSpawnMenuScript = preload("res://components/spawn_menu/project_spawn_menu.gd")
 const AgentListPanelScript = preload("res://components/agent_list/agent_list_panel.gd")
+const WorktreePanelScript = preload("res://components/worktree_panel/worktree_panel.gd")
 
 
 ## Emitted when a panel is registered
@@ -63,6 +64,14 @@ const PANEL_TYPES := {
 		"script": "res://components/agent_list/agent_list_panel.gd",
 		"default_size": Vector2(0.6, 0.7),
 		"icon": "📊"
+	},
+	"worktree": {
+		"name": "Git Worktrees",
+		"description": "Manage git worktrees for isolated agent workspaces",
+		"scene": "res://components/worktree_panel/worktree_panel.gd",
+		"script": "res://components/worktree_panel/worktree_panel.gd",
+		"default_size": Vector2(0.7, 0.8),
+		"icon": "🌳"
 	}
 }
 
@@ -192,6 +201,8 @@ func spawn_panel(type_key: String, spawn_transform: Transform3D, parent: Node3D 
 		panel = ProjectSpawnMenuScript.new()
 	elif type_key == "agent_list":
 		panel = AgentListPanelScript.new()
+	elif type_key == "worktree":
+		panel = WorktreePanelScript.new()
 	else:
 		panel = WorkspacePanel.new()
 		if type_info.has("content_scene"):
