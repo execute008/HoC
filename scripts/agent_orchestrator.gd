@@ -577,3 +577,31 @@ func kill_all_agents(signal_num: int = 0) -> int:
 			if err == OK:
 				killed += 1
 	return killed
+
+
+## Restart an agent by killing it and spawning a new one with the same config.
+## Returns the new agent ID on success, or empty string on failure.
+## Note: The caller should wait for agent_created signal to get the new agent.
+func restart_agent(agent_id: String) -> Error:
+	if not has_agent(agent_id):
+		push_error("AgentOrchestrator: Cannot restart - unknown agent ID: %s" % agent_id)
+		return ERR_DOES_NOT_EXIST
+
+	var session := get_session(agent_id)
+	var project_path := session.project_path
+	var preset := session.preset
+	var cols := session.cols
+	var rows := session.rows
+
+	# Kill the current agent
+	var err := kill_agent(agent_id)
+	if err != OK and session.state != AgentState.EXITED:
+		push_warning("AgentOrchestrator: Failed to kill agent for restart: %s" % agent_id)
+		# Continue anyway - the agent may already be exited
+
+	# Remove the old agent from tracking
+	if session.state == AgentState.EXITED:
+		remove_agent(agent_id)
+
+	# Spawn a new agent with the same config
+	return spawn_agent(project_path, preset, cols, rows)

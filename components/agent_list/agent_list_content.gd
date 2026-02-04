@@ -21,6 +21,9 @@ signal kill_all_requested
 ## Emitted when user clicks an agent to focus its terminal
 signal focus_agent_requested(agent_id: String)
 
+## Emitted when user requests to restart an agent
+signal restart_agent_requested(agent_id: String)
+
 ## Emitted when the panel should be closed
 signal close_requested
 
@@ -150,7 +153,7 @@ func _setup_ui() -> void:
 	# Title
 	_title_label = Label.new()
 	_title_label.name = "TitleLabel"
-	_title_label.text = "Active Agents"
+	_title_label.text = "Agent Overview"
 	_title_label.add_theme_font_size_override("font_size", 20)
 	_title_label.add_theme_color_override("font_color", THEME_TEXT_PRIMARY)
 	_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -221,7 +224,7 @@ func _setup_ui() -> void:
 func _create_agent_item(session) -> Control:
 	var item := PanelContainer.new()
 	item.name = "Agent_" + session.agent_id
-	item.custom_minimum_size = Vector2(0, 60)
+	item.custom_minimum_size = Vector2(0, 90)  # Increased height for working directory
 	item.set_meta("agent_id", session.agent_id)
 
 	# Item style
@@ -236,7 +239,7 @@ func _create_agent_item(session) -> Control:
 	# Main container
 	var hbox := HBoxContainer.new()
 	hbox.name = "Content"
-	hbox.add_theme_constant_override("separation", 12)
+	hbox.add_theme_constant_override("separation", 10)
 	item.add_child(hbox)
 
 	# Status indicator
@@ -280,8 +283,19 @@ void fragment() {
 	name_label.add_theme_color_override("font_color", THEME_TEXT_PRIMARY)
 	info_container.add_child(name_label)
 
+	# Working directory row (full path)
+	var path_label := Label.new()
+	path_label.name = "PathLabel"
+	path_label.text = session.project_path
+	path_label.add_theme_font_size_override("font_size", 9)
+	path_label.add_theme_color_override("font_color", THEME_TEXT_SECONDARY)
+	path_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	path_label.tooltip_text = session.project_path
+	info_container.add_child(path_label)
+
 	# Status and ID row
 	var status_row := HBoxContainer.new()
+	status_row.name = "StatusRow"
 	status_row.add_theme_constant_override("separation", 8)
 	info_container.add_child(status_row)
 
@@ -299,16 +313,48 @@ void fragment() {
 	id_label.add_theme_color_override("font_color", THEME_TEXT_SECONDARY)
 	status_row.add_child(id_label)
 
+	# Action buttons container
+	var actions_container := VBoxContainer.new()
+	actions_container.name = "ActionsContainer"
+	actions_container.add_theme_constant_override("separation", 4)
+	actions_container.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hbox.add_child(actions_container)
+
+	# Focus button (eye icon / "Focus")
+	var focus_button := Button.new()
+	focus_button.name = "FocusButton"
+	focus_button.text = "Focus"
+	focus_button.custom_minimum_size = Vector2(60, 26)
+	_style_small_action_button(focus_button)
+	focus_button.pressed.connect(_on_agent_focus_pressed.bind(session.agent_id))
+	# Disable focus if agent is exited or no terminal panel exists
+	focus_button.disabled = session.state == 3  # EXITED
+	actions_container.add_child(focus_button)
+
+	# Restart/Stop row
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 4)
+	actions_container.add_child(action_row)
+
+	# Restart button
+	var restart_button := Button.new()
+	restart_button.name = "RestartButton"
+	restart_button.text = "↻"  # Restart symbol
+	restart_button.tooltip_text = "Restart agent"
+	restart_button.custom_minimum_size = Vector2(26, 26)
+	_style_small_action_button(restart_button)
+	restart_button.pressed.connect(_on_agent_restart_pressed.bind(session.agent_id))
+	action_row.add_child(restart_button)
+
 	# Kill button
 	var kill_button := Button.new()
 	kill_button.name = "KillButton"
-	kill_button.text = "Kill"
-	kill_button.custom_minimum_size = Vector2(60, 36)
-	kill_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	kill_button.text = "Stop"
+	kill_button.custom_minimum_size = Vector2(34, 26)
 	_style_small_danger_button(kill_button)
 	kill_button.pressed.connect(_on_agent_kill_pressed.bind(session.agent_id))
 	kill_button.disabled = session.state == 3  # EXITED
-	hbox.add_child(kill_button)
+	action_row.add_child(kill_button)
 
 	return item
 
@@ -369,7 +415,35 @@ func _style_danger_button(button: Button) -> void:
 
 func _style_small_danger_button(button: Button) -> void:
 	_style_danger_button(button)
-	button.add_theme_font_size_override("font_size", 11)
+	button.add_theme_font_size_override("font_size", 10)
+
+
+func _style_small_action_button(button: Button) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.25, 0.35, 0.5, 0.9)
+	style.border_color = Color(0.3, 0.4, 0.55)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	style.set_content_margin_all(4)
+	button.add_theme_stylebox_override("normal", style)
+	button.add_theme_font_size_override("font_size", 10)
+	button.add_theme_color_override("font_color", THEME_TEXT_PRIMARY)
+
+	var hover_style := style.duplicate()
+	hover_style.bg_color = Color(0.3, 0.45, 0.65, 0.95)
+	hover_style.border_color = THEME_ACCENT_COLOR
+	button.add_theme_stylebox_override("hover", hover_style)
+
+	var pressed_style := style.duplicate()
+	pressed_style.bg_color = Color(0.35, 0.5, 0.7)
+	pressed_style.border_color = Color(0.5, 0.7, 1.0)
+	button.add_theme_stylebox_override("pressed", pressed_style)
+
+	var disabled_style := style.duplicate()
+	disabled_style.bg_color = Color(0.2, 0.2, 0.25, 0.5)
+	disabled_style.border_color = Color(0.25, 0.25, 0.3)
+	button.add_theme_stylebox_override("disabled", disabled_style)
+	button.add_theme_color_override("font_disabled_color", THEME_TEXT_SECONDARY)
 
 
 # =============================================================================
@@ -445,13 +519,18 @@ func _update_agent_item(agent_id: String) -> void:
 				status_indicator.color = STATE_COLORS.get(session.state, Color.GRAY)
 
 			# Update state label
-			var state_label := child.get_node_or_null("Content/InfoContainer/HBoxContainer/StateLabel")
+			var state_label := child.get_node_or_null("Content/InfoContainer/StatusRow/StateLabel")
 			if state_label:
 				state_label.text = STATE_NAMES.get(session.state, "Unknown")
 				state_label.add_theme_color_override("font_color", STATE_COLORS.get(session.state, Color.GRAY))
 
+			# Update focus button
+			var focus_button := child.get_node_or_null("Content/ActionsContainer/FocusButton")
+			if focus_button:
+				focus_button.disabled = session.state == 3  # EXITED
+
 			# Update kill button
-			var kill_button := child.get_node_or_null("Content/KillButton")
+			var kill_button := child.get_node_or_null("Content/ActionsContainer/HBoxContainer/KillButton")
 			if kill_button:
 				kill_button.disabled = session.state == 3  # EXITED
 
@@ -499,6 +578,14 @@ func _on_refresh_timer() -> void:
 
 func _on_agent_kill_pressed(agent_id: String) -> void:
 	kill_agent_requested.emit(agent_id)
+
+
+func _on_agent_focus_pressed(agent_id: String) -> void:
+	focus_agent_requested.emit(agent_id)
+
+
+func _on_agent_restart_pressed(agent_id: String) -> void:
+	restart_agent_requested.emit(agent_id)
 
 
 func _on_kill_all_button_pressed() -> void:

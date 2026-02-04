@@ -18,6 +18,12 @@ signal agent_killed(agent_id: String)
 ## Emitted when all agents are killed
 signal all_agents_killed(count: int)
 
+## Emitted when an agent is restarted
+signal agent_restarted(agent_id: String)
+
+## Emitted when an agent's terminal is focused
+signal agent_focused(agent_id: String)
+
 
 # =============================================================================
 # State
@@ -25,6 +31,7 @@ signal all_agents_killed(count: int)
 
 var _list_content: Control = null  # AgentListContent instance
 var _agent_orchestrator: Node = null
+var _panel_registry: Node = null
 
 
 # =============================================================================
@@ -33,9 +40,9 @@ var _agent_orchestrator: Node = null
 
 func _init() -> void:
 	# Configure as a compact panel for agent management
-	panel_size = Vector2(0.5, 0.6)
-	title = "Agents"
-	viewport_size = Vector2(400, 480)
+	panel_size = Vector2(0.6, 0.7)  # Slightly larger for working directory display
+	title = "Agent Overview"
+	viewport_size = Vector2(480, 560)  # Increased for better readability
 	resizable = false
 	billboard_mode = true
 
@@ -49,6 +56,7 @@ func _ready() -> void:
 	# Connect to content after setup
 	_connect_list_content()
 	_connect_agent_orchestrator()
+	_connect_panel_registry()
 
 
 func _connect_list_content() -> void:
@@ -63,6 +71,8 @@ func _connect_list_content() -> void:
 		_list_content.kill_agent_requested.connect(_on_kill_agent_requested)
 		_list_content.kill_all_requested.connect(_on_kill_all_requested)
 		_list_content.close_requested.connect(_on_close_requested)
+		_list_content.focus_agent_requested.connect(_on_focus_agent_requested)
+		_list_content.restart_agent_requested.connect(_on_restart_agent_requested)
 
 
 func _connect_agent_orchestrator() -> void:
@@ -73,6 +83,12 @@ func _connect_agent_orchestrator() -> void:
 
 	# Connect to spawn rejected signal
 	_agent_orchestrator.spawn_rejected.connect(_on_spawn_rejected)
+
+
+func _connect_panel_registry() -> void:
+	_panel_registry = get_node_or_null("/root/PanelRegistry")
+	if not _panel_registry:
+		push_warning("AgentListPanel: PanelRegistry autoload not found")
 
 
 # =============================================================================
@@ -105,6 +121,30 @@ func _on_kill_all_requested() -> void:
 
 func _on_close_requested() -> void:
 	close()
+
+
+func _on_focus_agent_requested(agent_id: String) -> void:
+	if not _panel_registry:
+		return
+
+	var success: bool = _panel_registry.focus_agent_panel(agent_id)
+	if success:
+		print("AgentListPanel: Focused terminal for agent: %s" % agent_id)
+		agent_focused.emit(agent_id)
+	else:
+		push_warning("AgentListPanel: No terminal panel found for agent: %s" % agent_id)
+
+
+func _on_restart_agent_requested(agent_id: String) -> void:
+	if not _agent_orchestrator:
+		return
+
+	var err: Error = _agent_orchestrator.restart_agent(agent_id)
+	if err == OK:
+		print("AgentListPanel: Restarting agent: %s" % agent_id)
+		agent_restarted.emit(agent_id)
+	else:
+		push_warning("AgentListPanel: Failed to restart agent: %s (error: %s)" % [agent_id, error_string(err)])
 
 
 func _on_spawn_rejected(reason: String, _current: int, _max: int) -> void:

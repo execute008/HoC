@@ -57,12 +57,12 @@ const PANEL_TYPES := {
 		"icon": "🎮"
 	},
 	"agent_list": {
-		"name": "Agents",
-		"description": "Manage active agent sessions",
+		"name": "Agent Overview",
+		"description": "Dashboard for all active agents with quick actions",
 		"scene": "res://components/agent_list/agent_list_panel.gd",
 		"script": "res://components/agent_list/agent_list_panel.gd",
-		"default_size": Vector2(0.5, 0.6),
-		"icon": "📋"
+		"default_size": Vector2(0.6, 0.7),
+		"icon": "📊"
 	}
 }
 
@@ -299,3 +299,25 @@ func _cleanup_dead_refs() -> void:
 
 	for panel_id in to_remove:
 		_panels.erase(panel_id)
+
+
+## Find a terminal panel bound to the specified agent ID.
+## Returns the TerminalPanel if found, null otherwise.
+func find_panel_for_agent(agent_id: String) -> WorkspacePanel:
+	for panel in get_all_panels():
+		if panel is TerminalPanel:
+			var terminal_panel: TerminalPanel = panel
+			if terminal_panel.get_bound_agent_id() == agent_id:
+				return terminal_panel
+	return null
+
+
+## Focus a terminal panel bound to the specified agent ID.
+## Returns true if the panel was found and focused.
+func focus_agent_panel(agent_id: String) -> bool:
+	var panel := find_panel_for_agent(agent_id)
+	if panel and panel is TerminalPanel:
+		var terminal_panel: TerminalPanel = panel
+		terminal_panel.request_focus()
+		return true
+	return false
