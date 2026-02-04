@@ -22,6 +22,7 @@ XRToolsRumbleManager="*res://addons/godot-xr-tools/rumble/rumble_manager.gd"
 PanelRegistry="*res://scripts/panel_registry.gd"
 BridgeLauncher="*res://scripts/bridge_launcher.gd"
 BridgeClient="*res://scripts/bridge_client.gd"
+AgentOrchestrator="*res://scripts/agent_orchestrator.gd"
 
 [editor_plugins]
 
