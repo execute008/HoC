@@ -32,18 +32,16 @@ LayoutManager="*res://scripts/layout_manager.gd"
 
 enabled=PackedStringArray("res://addons/godot-xr-tools/plugin.cfg")
 
-[godot_xr_tools/input]
+[godot_openxr_vendors]
 
-grip_threshold=0.7
-haptics_scale=1.0
-y_axis_dead_zone=0.1
-x_axis_dead_zone=0.2
-snap_turning_deadzone=0.25
-default_snap_turning=true
-
-[godot_xr_tools/player]
-
-standard_height=1.85
+meta/application_mode=0
+meta/hand_tracking=0
+meta/hand_tracking_frequency=1
+meta/passthrough=1
+meta/enable_anchor_persistence=true
+meta/enable_anchor_sharing=true
+meta/request_runtime_permissions_automatically=true
+meta/supported_devices=PackedStringArray("quest3", "quest3s", "questpro")
 
 [layer_names]
 
@@ -64,35 +62,16 @@ standard_height=1.85
 
 renderer/rendering_method="mobile"
 textures/vram_compression/import_etc2_astc=true
-anti_aliasing/quality/msaa_2d=0
-anti_aliasing/quality/msaa_3d=0
-anti_aliasing/quality/screen_space_aa=0
-environment/defaults/default_clear_color=Color(0.1, 0.1, 0.12, 1)
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=0
 lights_and_shadows/positional_shadow/soft_shadow_filter_quality=0
+environment/defaults/default_clear_color=Color(0.1, 0.1, 0.12, 1)
 
 [xr]
 
 openxr/enabled=true
-openxr/default_action_map="res://openxr_action_map.tres"
 openxr/foveation_level=3
 openxr/foveation_dynamic=true
 openxr/submit_depth_buffer=true
 openxr/startup_alert=false
 openxr/extensions/hand_tracking=true
 shaders/enabled=true
-
-[xr/openxr/extensions]
-
-hand_tracking=true
-
-[godot_openxr_vendors/meta]
-
-application_mode=0
-hand_tracking=0
-hand_tracking_frequency=1
-passthrough=1
-enable_anchor_persistence=true
-enable_anchor_sharing=true
-request_runtime_permissions_automatically=true
-supported_devices=PackedStringArray("quest3", "quest3s", "questpro")
