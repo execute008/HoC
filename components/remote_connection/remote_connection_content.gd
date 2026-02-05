@@ -440,7 +440,7 @@ func _load_settings() -> void:
 	if not _project_config:
 		return
 
-	var remote := _project_config.get_remote_connection()
+	var remote: Dictionary = _project_config.get_remote_connection()
 	_enabled_checkbox.button_pressed = remote.enabled
 	_host_input.text = remote.host
 	_port_input.value = remote.port
@@ -498,7 +498,7 @@ func _update_connection_status() -> void:
 		return
 
 	var state = _bridge_client.get_state()
-	var is_remote := _bridge_client.is_remote_connection()
+	var is_remote: bool = _bridge_client.is_remote_connection()
 
 	match state:
 		0:  # DISCONNECTED
@@ -508,7 +508,7 @@ func _update_connection_status() -> void:
 			_set_status("Connecting...", THEME_WARNING_COLOR)
 			_update_connect_button(true)
 		2:  # CONNECTED
-			var url := _bridge_client.get_connection_url()
+			var url: String = _bridge_client.get_connection_url()
 			var label := "Connected to %s" % url if is_remote else "Connected (local)"
 			_set_status(label, THEME_SUCCESS_COLOR)
 			_update_connect_button(true)
@@ -602,7 +602,7 @@ func _on_connect_pressed() -> void:
 			_show_message("Please enter a PC IP address", THEME_WARNING_COLOR)
 			return
 
-		var err := _bridge_client.connect_to_remote(host, port, token)
+		var err: int = _bridge_client.connect_to_remote(host, port, token)
 		if err != OK:
 			_show_message("Failed to connect: %s" % error_string(err), THEME_DANGER_COLOR)
 		else:

@@ -177,7 +177,7 @@ func _setup_auto_connect() -> void:
 	# Check if remote connection is configured
 	var project_config := get_node_or_null("/root/ProjectConfig")
 	if project_config and project_config.is_remote_connection_enabled():
-		var remote := project_config.get_remote_connection()
+		var remote: Variant = project_config.get_remote_connection()
 		print("BridgeClient: Remote connection configured, connecting to %s:%d" % [remote.host, remote.port])
 		_delayed_remote_connect(remote)
 		return
@@ -211,7 +211,7 @@ func _delayed_remote_connect(remote) -> void:
 	# Brief delay before connecting to remote
 	await get_tree().create_timer(0.2).timeout
 	_is_remote = true
-	var url := remote.get_websocket_url()
+	var url: String = remote.get_websocket_url()
 	var token: String = remote.token
 	print("BridgeClient: Connecting to remote bridge at %s" % url)
 	var err := connect_to_bridge(url, token)

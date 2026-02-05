@@ -432,7 +432,7 @@ func _populate_presets_for_project(project_path: String) -> void:
 		_selected_preset = default_preset_name
 
 	for preset in presets:
-		var is_selected := preset.name == _selected_preset
+		var is_selected: bool = preset.name == _selected_preset
 		_create_preset_button(preset.name, preset.name.capitalize(), preset.icon, is_selected)
 
 
@@ -671,7 +671,7 @@ func _update_spawn_button_state() -> void:
 
 	# Update button text to show limit status
 	if not can_spawn and path_valid:
-		var status := _agent_orchestrator.get_resource_status()
+		var status: Dictionary = _agent_orchestrator.get_resource_status()
 		_spawn_button.text = "Limit Reached (%d/%d)" % [status.active_agents, status.max_agents]
 	else:
 		_spawn_button.text = "Spawn Terminal"
