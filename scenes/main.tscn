@@ -1,11 +1,11 @@
 [gd_scene load_steps=16 format=3 uid="uid://by26h0yxvw6rf"]
 
-[ext_resource type="Script" uid="uid://main_scene_script" path="res://scripts/main_scene.gd" id="0_main_scene"]
+[ext_resource type="Script" uid="uid://dq63kkc1w4uoj" path="res://scripts/main_scene.gd" id="0_main_scene"]
 [ext_resource type="Script" uid="uid://ck4yn3hxuobj7" path="res://addons/godot-xr-tools/player/player_body.gd" id="1_player_body"]
 [ext_resource type="PackedScene" uid="uid://clc5dre31iskm" path="res://addons/godot-xr-tools/xr/start_xr.tscn" id="2_start_xr"]
 [ext_resource type="PackedScene" uid="uid://b4kad2kuba1yn" path="res://addons/godot-xr-tools/hands/scenes/lowpoly/left_hand_low.tscn" id="3_left_hand"]
 [ext_resource type="PackedScene" uid="uid://l2n30mpbkdyw" path="res://addons/godot-xr-tools/hands/scenes/lowpoly/right_hand_low.tscn" id="4_right_hand"]
-[ext_resource type="PackedScene" uid="uid://cenvironment_scene" path="res://scenes/environment.tscn" id="5_environment"]
+[ext_resource type="PackedScene" path="res://scenes/environment.tscn" id="5_environment"]
 [ext_resource type="PackedScene" uid="uid://bl2nuu3qhlb5k" path="res://addons/godot-xr-tools/functions/movement_direct.tscn" id="6_movement_direct"]
 [ext_resource type="PackedScene" uid="uid://b6bk2pj8vbj28" path="res://addons/godot-xr-tools/functions/movement_turn.tscn" id="7_movement_turn"]
 [ext_resource type="PackedScene" uid="uid://fiul51tsyoop" path="res://addons/godot-xr-tools/functions/function_teleport.tscn" id="8_function_teleport"]
@@ -13,7 +13,7 @@
 [ext_resource type="PackedScene" uid="uid://cqhw276realc" path="res://addons/godot-xr-tools/functions/function_pointer.tscn" id="10_function_pointer"]
 [ext_resource type="Script" uid="uid://b6nyshbg51kxw" path="res://components/workspace_panel/workspace_panel.gd" id="11_workspace_panel"]
 [ext_resource type="PackedScene" uid="uid://dvmocnt2d7xgb" path="res://components/workspace_panel/demo_content.tscn" id="12_demo_content"]
-[ext_resource type="Script" uid="uid://panel_spawner_script" path="res://components/spawn_menu/panel_spawner.gd" id="13_panel_spawner"]
+[ext_resource type="Script" uid="uid://dyhqbuxtrs00b" path="res://components/spawn_menu/panel_spawner.gd" id="13_panel_spawner"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
 size = Vector3(200, 0.1, 200)
@@ -43,6 +43,7 @@ strafe = true
 [node name="FunctionPickup" parent="XROrigin3D/LeftController" instance=ExtResource("9_function_pickup")]
 
 [node name="FunctionPointer" parent="XROrigin3D/LeftController" instance=ExtResource("10_function_pointer")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.02, 0.05, -0.1)
 
 [node name="RightController" type="XRController3D" parent="XROrigin3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1, -0.5)
@@ -55,11 +56,13 @@ turn_mode = 1
 step_turn_angle = 30.0
 
 [node name="FunctionTeleport" parent="XROrigin3D/RightController" instance=ExtResource("8_function_teleport")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.1)
 teleport_button_action = "primary_click"
 
 [node name="FunctionPickup" parent="XROrigin3D/RightController" instance=ExtResource("9_function_pickup")]
 
 [node name="FunctionPointer" parent="XROrigin3D/RightController" instance=ExtResource("10_function_pointer")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, 0.05, -0.1)
 
 [node name="PlayerBody" type="CharacterBody3D" parent="XROrigin3D" groups=["player_body"]]
 process_priority = -100
@@ -79,9 +82,6 @@ script = ExtResource("11_workspace_panel")
 panel_size = Vector2(1.2, 0.9)
 title = "Demo Panel"
 content_scene = ExtResource("12_demo_content")
-viewport_size = Vector2(800, 600)
 
 [node name="PanelSpawner" type="Node3D" parent="."]
 script = ExtResource("13_panel_spawner")
-trigger_controller = "left"
-menu_action = "by_button"
