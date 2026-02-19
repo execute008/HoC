@@ -412,8 +412,15 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
                 )),
             }
         }
-        ClientMessage::KillAgent { agent_id, .. } => {
-            debug!("KillAgent request: agent={}", agent_id);
+        ClientMessage::KillAgent { agent_id, signal, .. } => {
+            // Note: `signal` is accepted by the protocol but not forwarded to the PTY layer
+            // because portable-pty only supports kill(), not arbitrary signal delivery.
+            // The parameter is retained for future use if we switch to a native PTY backend.
+            if signal.is_some() {
+                debug!("KillAgent request: agent={} (signal={:?} ignored, using kill)", agent_id, signal);
+            } else {
+                debug!("KillAgent request: agent={}", agent_id);
+            }
             match agent_manager.kill_agent(agent_id).await {
                 Ok(()) => {
                     info!("Agent killed: {}", agent_id);
