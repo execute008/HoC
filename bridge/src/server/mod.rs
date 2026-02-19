@@ -5,6 +5,7 @@
 
 #[allow(dead_code)]
 mod handler;
+#[allow(dead_code)]
 mod protocol;
 mod websocket;
 
