@@ -245,7 +245,7 @@ func _create_agent_item(session) -> Control:
 	# Status indicator
 	var status_indicator := ColorRect.new()
 	status_indicator.name = "StatusIndicator"
-	status_indicator.custom_minimum_size = Vector2(8, 8)
+	status_indicator.custom_minimum_size = Vector2(12, 12)
 	status_indicator.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	status_indicator.color = STATE_COLORS.get(session.state, Color.GRAY)
 	# Make it circular with shader
@@ -324,7 +324,7 @@ void fragment() {
 	var focus_button := Button.new()
 	focus_button.name = "FocusButton"
 	focus_button.text = "Focus"
-	focus_button.custom_minimum_size = Vector2(60, 26)
+	focus_button.custom_minimum_size = Vector2(70, 36)
 	_style_small_action_button(focus_button)
 	focus_button.pressed.connect(_on_agent_focus_pressed.bind(session.agent_id))
 	# Disable focus if agent is exited or no terminal panel exists
@@ -341,7 +341,7 @@ void fragment() {
 	restart_button.name = "RestartButton"
 	restart_button.text = "↻"  # Restart symbol
 	restart_button.tooltip_text = "Restart agent"
-	restart_button.custom_minimum_size = Vector2(26, 26)
+	restart_button.custom_minimum_size = Vector2(36, 36)
 	_style_small_action_button(restart_button)
 	restart_button.pressed.connect(_on_agent_restart_pressed.bind(session.agent_id))
 	action_row.add_child(restart_button)
@@ -350,7 +350,7 @@ void fragment() {
 	var kill_button := Button.new()
 	kill_button.name = "KillButton"
 	kill_button.text = "Stop"
-	kill_button.custom_minimum_size = Vector2(34, 26)
+	kill_button.custom_minimum_size = Vector2(48, 36)
 	_style_small_danger_button(kill_button)
 	kill_button.pressed.connect(_on_agent_kill_pressed.bind(session.agent_id))
 	kill_button.disabled = session.state == 3  # EXITED
