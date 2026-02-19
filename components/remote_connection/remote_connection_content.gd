@@ -73,9 +73,15 @@ func _ready() -> void:
 	_update_connection_status()
 
 
-func _process(_delta: float) -> void:
-	# Update connection status periodically
-	_update_connection_status()
+var _status_poll_timer: float = 0.0
+
+func _process(delta: float) -> void:
+	# Poll connection status at 2Hz instead of every frame — event-driven
+	# updates via signal callbacks handle immediate state changes already
+	_status_poll_timer += delta
+	if _status_poll_timer >= 0.5:
+		_status_poll_timer = 0.0
+		_update_connection_status()
 
 
 func _connect_autoloads() -> void:

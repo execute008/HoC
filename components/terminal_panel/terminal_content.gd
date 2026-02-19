@@ -72,7 +72,7 @@ var _saved_cursor_col: int = 0
 var _is_focused: bool = false
 
 # Performance optimization state
-var _dirty_lines: PackedInt32Array = PackedInt32Array()
+var _dirty_lines_set: Dictionary = {}  # line_idx -> true, O(1) lookup
 var _full_redraw_needed: bool = true
 var _output_buffer: String = ""
 var _is_throttled: bool = false
@@ -156,7 +156,7 @@ func _draw() -> void:
 	var lines_to_draw := end_line - start_line
 	if lines_to_draw > MAX_LINES_PER_FRAME and not _full_redraw_needed:
 		# Only draw dirty lines
-		for line_idx in _dirty_lines:
+		for line_idx in _dirty_lines_set.keys():
 			if line_idx >= start_line and line_idx < end_line:
 				var screen_row := line_idx - start_line
 				var line_y := screen_row * _char_size.y
@@ -174,7 +174,7 @@ func _draw() -> void:
 			y_offset += _char_size.y
 
 	# Clear dirty state after draw
-	_dirty_lines.clear()
+	_dirty_lines_set.clear()
 	_full_redraw_needed = false
 
 	# Draw cursor
@@ -392,8 +392,8 @@ func _write_text_internal(text: String) -> void:
 
 ## Mark a specific line as needing redraw
 func _mark_line_dirty(line_idx: int) -> void:
-	if line_idx not in _dirty_lines:
-		_dirty_lines.append(line_idx)
+	if line_idx not in _dirty_lines_set:
+		_dirty_lines_set[line_idx] = true
 
 
 ## Mark cursor area as dirty
@@ -639,7 +639,7 @@ func clear() -> void:
 	_initialize_buffer()
 	_ansi_parser.reset()
 	_output_buffer = ""
-	_dirty_lines.clear()
+	_dirty_lines_set.clear()
 	_full_redraw_needed = true
 	queue_redraw()
 	content_changed.emit()
