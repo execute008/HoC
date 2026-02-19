@@ -63,9 +63,13 @@ async fn main() -> anyhow::Result<()> {
 
     if let Some(ref token) = args.token {
         info!("Token authentication enabled");
-        info!("===========================================");
-        info!("AUTH TOKEN: {}", token);
-        info!("===========================================");
+        // Only show a hint of the token for verification, not the full value
+        let hint = if token.len() > 8 {
+            format!("{}...{}", &token[..4], &token[token.len()-4..])
+        } else {
+            "****".to_string()
+        };
+        info!("Auth token configured (hint: {})", hint);
     }
 
     // Create server configuration
