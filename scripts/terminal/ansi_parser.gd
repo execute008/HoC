@@ -408,8 +408,8 @@ func _get_256_color(index: int) -> Color:
 			(b * 40 + 55) / 255.0 if b > 0 else 0.0
 		)
 
-	# Grayscale (232-255): 24 shades
-	var gray := (index - 232) / 23.0
+	# Grayscale (232-255): 24 shades from rgb(8,8,8) to rgb(238,238,238)
+	var gray := ((index - 232) * 10 + 8) / 255.0
 	return Color(gray, gray, gray)
 
 
