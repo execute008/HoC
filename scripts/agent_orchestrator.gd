@@ -66,7 +66,7 @@ class AgentSession:
 		state = AgentState.SPAWNING
 		exit_code = -1
 		exit_reason = ""
-		created_at = Time.get_unix_time_from_system()
+		created_at = int(Time.get_unix_time_from_system())
 		callbacks = []
 
 	func add_callback(callback: Callable) -> void:
@@ -452,6 +452,12 @@ func _on_agent_list_received(agents: Array) -> void:
 				session.exit_reason = "removed_from_bridge"
 				agent_state_changed.emit(agent_id, old_state, AgentState.EXITED)
 				agent_exit.emit(agent_id, -1, "removed_from_bridge")
+			to_remove.append(agent_id)
+
+	# Actually remove stale sessions from the registry
+	for agent_id in to_remove:
+		_sessions.erase(agent_id)
+		agent_removed.emit(agent_id)
 
 	agent_count_changed.emit(_sessions.size())
 

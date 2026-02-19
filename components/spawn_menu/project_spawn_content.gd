@@ -381,7 +381,7 @@ func _create_recent_project_button(project) -> void:
 
 
 func _format_time_ago(timestamp: int) -> String:
-	var now := Time.get_unix_time_from_system()
+	var now := int(Time.get_unix_time_from_system())
 	var diff: int = now - timestamp
 
 	if diff < 60:
