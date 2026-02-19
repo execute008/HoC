@@ -556,15 +556,18 @@ func _on_enabled_toggled(pressed: bool) -> void:
 	_update_ui_enabled_state()
 
 
-func _on_host_changed(new_text: String) -> void:
-	pass  # Could add validation
-
-
-func _on_port_changed(new_value: float) -> void:
+func _on_host_changed(_new_text: String) -> void:
+	# Validation happens on save; real-time feedback not needed
 	pass
 
 
-func _on_token_changed(new_text: String) -> void:
+func _on_port_changed(_new_value: float) -> void:
+	# Validation happens on save
+	pass
+
+
+func _on_token_changed(_new_text: String) -> void:
+	# Validation happens on save
 	pass
 
 
