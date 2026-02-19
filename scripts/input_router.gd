@@ -363,20 +363,42 @@ func show_virtual_keyboard() -> void:
 	if not _focused_panel:
 		return
 
-	# Virtual keyboard implementation is optional
-	# This provides a hook for VR keyboard integration
-	pass
+	_ensure_virtual_keyboard()
+
+	if _virtual_keyboard and _virtual_keyboard.has_method("show_near_panel"):
+		_virtual_keyboard.show_near_panel(_focused_panel)
 
 
 ## Hide virtual keyboard
 func hide_virtual_keyboard() -> void:
-	if _virtual_keyboard:
+	if _virtual_keyboard and _virtual_keyboard.has_method("dismiss"):
+		_virtual_keyboard.dismiss()
+	elif _virtual_keyboard:
 		_virtual_keyboard.hide()
 
 
 ## Check if virtual keyboard is visible
 func is_virtual_keyboard_visible() -> bool:
 	return _virtual_keyboard != null and _virtual_keyboard.visible
+
+
+## Toggle virtual keyboard visibility
+func toggle_virtual_keyboard() -> void:
+	if is_virtual_keyboard_visible():
+		hide_virtual_keyboard()
+	else:
+		show_virtual_keyboard()
+
+
+## Lazily create the VR keyboard instance
+func _ensure_virtual_keyboard() -> void:
+	if _virtual_keyboard and is_instance_valid(_virtual_keyboard):
+		return
+
+	_virtual_keyboard = VRKeyboard.new()
+	_virtual_keyboard.name = "VRKeyboard"
+	_virtual_keyboard.visible = false
+	get_tree().current_scene.add_child(_virtual_keyboard)
 
 
 # =============================================================================
