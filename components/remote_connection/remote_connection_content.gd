@@ -440,7 +440,7 @@ func _load_settings() -> void:
 	if not _project_config:
 		return
 
-	var remote: Dictionary = _project_config.get_remote_connection()
+	var remote = _project_config.get_remote_connection()
 	_enabled_checkbox.button_pressed = remote.enabled
 	_host_input.text = remote.host
 	_port_input.value = remote.port
