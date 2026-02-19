@@ -144,17 +144,7 @@ func _process(delta: float) -> void:
 
 func _find_xr_camera() -> void:
 	var root := get_tree().root
-	_xr_camera = _find_node_by_class(root, "XRCamera3D") as XRCamera3D
-
-
-func _find_node_by_class(node: Node, target_class: String) -> Node:
-	if node.get_class() == target_class:
-		return node
-	for child in node.get_children():
-		var result = _find_node_by_class(child, target_class)
-		if result:
-			return result
-	return null
+	_xr_camera = Utils.find_node_by_class(root, "XRCamera3D") as XRCamera3D
 
 
 # =============================================================================

@@ -68,11 +68,11 @@ func _process(_delta: float) -> void:
 
 func _find_xr_nodes() -> void:
 	# Find XR origin first
-	var xr_origin := _find_node_by_class(get_tree().root, "XROrigin3D")
+	var xr_origin := Utils.find_node_by_class(get_tree().root, "XROrigin3D")
 	if not xr_origin:
 		# Try again on next frame
 		await get_tree().process_frame
-		xr_origin = _find_node_by_class(get_tree().root, "XROrigin3D")
+		xr_origin = Utils.find_node_by_class(get_tree().root, "XROrigin3D")
 
 	if not xr_origin:
 		push_warning("PanelSpawner: Could not find XROrigin3D")
@@ -96,16 +96,6 @@ func _find_xr_nodes() -> void:
 			elif trigger_controller == "right" and is_right:
 				_controller = child
 				break
-
-
-func _find_node_by_class(node: Node, target_class: String) -> Node:
-	if node.get_class() == target_class:
-		return node
-	for child in node.get_children():
-		var result := _find_node_by_class(child, target_class)
-		if result:
-			return result
-	return null
 
 
 func _toggle_spawn_menu() -> void:

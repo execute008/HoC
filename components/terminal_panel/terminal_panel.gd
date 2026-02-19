@@ -179,7 +179,7 @@ func _connect_terminal_content() -> void:
 
 func _find_controllers() -> void:
 	# Find XR controllers in the scene
-	var xr_origin := _find_node_by_class(get_tree().root, "XROrigin3D")
+	var xr_origin := Utils.find_node_by_class(get_tree().root, "XROrigin3D")
 	if xr_origin:
 		for child in xr_origin.get_children():
 			if child is XRController3D:

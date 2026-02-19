@@ -327,23 +327,7 @@ func _create_project_item(project) -> Control:
 
 
 func _format_time_ago(timestamp: int) -> String:
-	var now := int(Time.get_unix_time_from_system())
-	var diff := now - timestamp
-
-	if diff < 60:
-		return "Just now"
-	elif diff < 3600:
-		var mins := diff / 60
-		return "%d min%s ago" % [mins, "s" if mins > 1 else ""]
-	elif diff < 86400:
-		var hours := diff / 3600
-		return "%d hour%s ago" % [hours, "s" if hours > 1 else ""]
-	elif diff < 604800:
-		var days := diff / 86400
-		return "%d day%s ago" % [days, "s" if days > 1 else ""]
-	else:
-		var date := Time.get_datetime_dict_from_unix_time(timestamp)
-		return "%04d-%02d-%02d" % [date.year, date.month, date.day]
+	return Utils.format_time_ago(timestamp)
 
 
 # =============================================================================

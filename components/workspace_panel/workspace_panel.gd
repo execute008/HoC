@@ -418,17 +418,7 @@ func _find_xr_camera() -> void:
 	# Try to find the XR camera in the scene
 	var viewport = get_viewport()
 	if viewport:
-		_xr_camera = _find_node_by_class(viewport, "XRCamera3D")
-
-
-func _find_node_by_class(node: Node, target_class: String) -> Node:
-	if node.get_class() == target_class:
-		return node
-	for child in node.get_children():
-		var result = _find_node_by_class(child, target_class)
-		if result:
-			return result
-	return null
+		_xr_camera = Utils.find_node_by_class(viewport, "XRCamera3D")
 
 
 func _apply_billboard() -> void:
