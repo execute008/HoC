@@ -425,8 +425,10 @@ func _style_small_danger_button(button: Button) -> void:
 
 func _refresh_project_list() -> void:
 	# Clear existing items (except empty label)
+	# Remove from tree immediately to avoid duplicates on rapid refresh
 	for child in _project_list.get_children():
 		if child != _empty_label:
+			_project_list.remove_child(child)
 			child.queue_free()
 
 	if not _project_config:

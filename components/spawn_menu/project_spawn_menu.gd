@@ -171,7 +171,12 @@ func _on_agent_created(agent_id: String, session) -> void:
 	if _pending_spawn_path == "" or not _pending_terminal:
 		return
 
+	# Match by project path AND ensure we haven't already bound this terminal
 	if session.project_path != _pending_spawn_path:
+		return
+
+	# Guard against duplicate signals: if terminal is already bound, skip
+	if _pending_terminal.is_bound():
 		return
 
 	# Bind terminal to agent

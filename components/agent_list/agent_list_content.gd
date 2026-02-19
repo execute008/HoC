@@ -455,8 +455,10 @@ func _refresh_agent_list() -> void:
 		return
 
 	# Clear existing items (except empty label)
+	# Use reverse iteration since queue_free doesn't remove immediately
 	for child in _agent_list.get_children():
 		if child != _empty_label:
+			_agent_list.remove_child(child)
 			child.queue_free()
 
 	# Get all sessions
