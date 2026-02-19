@@ -1,21 +1,6 @@
 //! WebSocket connection handler
 //!
-//! Manages individual WebSocket connections and message routing.
-
-/// Handles a single WebSocket connection
-pub struct ConnectionHandler {
-    // Will be implemented in US-RBS-002
-}
-
-impl ConnectionHandler {
-    /// Create a new connection handler
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for ConnectionHandler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+//! Connection handling logic is implemented directly in websocket.rs
+//! via the `handle_connection` and `handle_message` functions.
+//! This module is reserved for future extraction if the handler
+//! logic grows complex enough to warrant separation.
