@@ -269,12 +269,14 @@ func calculate_spawn_position(camera: XRCamera3D, distance: float = DEFAULT_SPAW
 	var spawn_transform := Transform3D.IDENTITY
 	spawn_transform.origin = spawn_pos
 
-	# Face the camera (rotate to look at camera position, then flip)
+	# Face the camera: look_at points -Z at target, but panel content is on +Z side,
+	# so we look away from camera (making +Z face the camera)
 	var look_dir := camera_transform.origin - spawn_pos
 	look_dir.y = 0  # Keep panel upright
 	if look_dir.length() > 0.01:
 		look_dir = look_dir.normalized()
-		spawn_transform = spawn_transform.looking_at(spawn_pos + look_dir, Vector3.UP)
+		# Point -Z away from camera so +Z (content side) faces the user
+		spawn_transform = spawn_transform.looking_at(spawn_pos - look_dir, Vector3.UP)
 
 	return spawn_transform
 
