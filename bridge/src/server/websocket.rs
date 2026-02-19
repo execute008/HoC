@@ -14,7 +14,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
 use super::protocol::{
-    ClientMessage, ErrorCode, ServerMessage, DEFAULT_TERMINAL_COLS, DEFAULT_TERMINAL_ROWS,
+    ClientEnvelope, ClientMessage, ErrorCode, ServerMessage, DEFAULT_TERMINAL_COLS, DEFAULT_TERMINAL_ROWS,
 };
 use crate::agent::{AgentManager, SpawnConfig};
 use crate::config::ProjectConfig;
@@ -299,7 +299,11 @@ async fn handle_connection(
 ///
 /// Returns `Ok(None)` when no response is needed (e.g., agent input).
 async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Result<Option<ServerMessage>> {
-    let message: ClientMessage = serde_json::from_str(text)?;
+    let envelope = ClientEnvelope::from_json(text).map_err(|e| {
+        debug!("Invalid client message: {}", e);
+        anyhow::anyhow!("{}", e)
+    })?;
+    let message = envelope.message;
 
     match message {
         ClientMessage::Authenticate { .. } => {
