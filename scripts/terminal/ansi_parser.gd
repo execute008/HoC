@@ -403,9 +403,9 @@ func _get_256_color(index: int) -> Color:
 		var g := (cube_index / 6) % 6
 		var b := cube_index % 6
 		return Color(
-			r * 0.2 if r > 0 else 0.0,
-			g * 0.2 if g > 0 else 0.0,
-			b * 0.2 if b > 0 else 0.0
+			(r * 40 + 55) / 255.0 if r > 0 else 0.0,
+			(g * 40 + 55) / 255.0 if g > 0 else 0.0,
+			(b * 40 + 55) / 255.0 if b > 0 else 0.0
 		)
 
 	# Grayscale (232-255): 24 shades
