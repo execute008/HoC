@@ -38,7 +38,9 @@ signal agent_count_changed(count: int)
 ## Agent states
 enum AgentState {
 	SPAWNING,    ## Spawn request sent, waiting for confirmation
-	RUNNING,     ## Agent is running
+	IDLE,        ## Agent is connected but not actively processing
+	RUNNING,     ## Agent is actively running/processing
+	ERROR,       ## Agent encountered an error (still alive but faulted)
 	EXITING,     ## Exit requested, waiting for confirmation
 	EXITED       ## Agent has exited
 }
@@ -468,7 +470,7 @@ func _on_agent_status_received(agent_id: String, status: String, project_path: S
 		var session := AgentSession.new(agent_id, project_path)
 		session.cols = cols
 		session.rows = rows
-		session.state = AgentState.RUNNING if status == "running" else AgentState.EXITED
+		session.state = _parse_status_string(status)
 
 		_sessions[agent_id] = session
 		agent_created.emit(agent_id, session)
@@ -478,11 +480,76 @@ func _on_agent_status_received(agent_id: String, status: String, project_path: S
 		session.cols = cols
 		session.rows = rows
 
-		var new_state := AgentState.RUNNING if status == "running" else AgentState.EXITED
+		var new_state := _parse_status_string(status)
 		if session.state != new_state:
 			var old_state := session.state
 			session.state = new_state
 			agent_state_changed.emit(agent_id, old_state, new_state)
+
+
+# =============================================================================
+# Internal - State Helpers
+# =============================================================================
+
+## Parse a status string from the bridge into an AgentState
+func _parse_status_string(status: String) -> AgentState:
+	match status:
+		"running":
+			return AgentState.RUNNING
+		"idle":
+			return AgentState.IDLE
+		"error":
+			return AgentState.ERROR
+		"exited":
+			return AgentState.EXITED
+		"exiting":
+			return AgentState.EXITING
+		"spawning":
+			return AgentState.SPAWNING
+		_:
+			push_warning("AgentOrchestrator: Unknown status string: %s" % status)
+			return AgentState.EXITED
+
+
+## Transition an agent to IDLE state (e.g., when it finishes a task but stays alive)
+func set_agent_idle(agent_id: String) -> Error:
+	if not has_agent(agent_id):
+		return ERR_DOES_NOT_EXIST
+	var session := get_session(agent_id)
+	if session.state == AgentState.EXITED:
+		return ERR_UNAVAILABLE
+	var old_state := session.state
+	session.state = AgentState.IDLE
+	agent_state_changed.emit(agent_id, old_state, AgentState.IDLE)
+	return OK
+
+
+## Transition an agent to ERROR state
+func set_agent_error(agent_id: String, error_reason: String = "") -> Error:
+	if not has_agent(agent_id):
+		return ERR_DOES_NOT_EXIST
+	var session := get_session(agent_id)
+	if session.state == AgentState.EXITED:
+		return ERR_UNAVAILABLE
+	var old_state := session.state
+	session.state = AgentState.ERROR
+	if error_reason != "":
+		session.exit_reason = error_reason
+	agent_state_changed.emit(agent_id, old_state, AgentState.ERROR)
+	return OK
+
+
+## Transition an agent back to RUNNING state (e.g., from IDLE or ERROR)
+func set_agent_running(agent_id: String) -> Error:
+	if not has_agent(agent_id):
+		return ERR_DOES_NOT_EXIST
+	var session := get_session(agent_id)
+	if session.state == AgentState.EXITED:
+		return ERR_UNAVAILABLE
+	var old_state := session.state
+	session.state = AgentState.RUNNING
+	agent_state_changed.emit(agent_id, old_state, AgentState.RUNNING)
+	return OK
 
 
 # =============================================================================

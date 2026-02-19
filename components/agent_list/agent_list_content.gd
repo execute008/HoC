@@ -41,20 +41,42 @@ const THEME_ACCENT_COLOR := Color(0.4, 0.6, 0.9)
 const THEME_TEXT_PRIMARY := Color(0.95, 0.95, 0.98)
 const THEME_TEXT_SECONDARY := Color(0.7, 0.7, 0.75)
 
-# State colors
+# State colors - matches AgentOrchestrator.AgentState enum order
 const STATE_COLORS := {
 	0: Color(1.0, 0.8, 0.0),  # SPAWNING - Yellow
-	1: Color(0.2, 0.9, 0.3),  # RUNNING - Green
-	2: Color(1.0, 0.5, 0.0),  # EXITING - Orange
-	3: Color(0.6, 0.6, 0.6),  # EXITED - Gray
+	1: Color(0.4, 0.7, 1.0),  # IDLE - Blue
+	2: Color(0.2, 0.9, 0.3),  # RUNNING - Green
+	3: Color(0.9, 0.2, 0.2),  # ERROR - Red
+	4: Color(1.0, 0.5, 0.0),  # EXITING - Orange
+	5: Color(0.6, 0.6, 0.6),  # EXITED - Gray
 }
 
 const STATE_NAMES := {
 	0: "Spawning",
-	1: "Running",
-	2: "Exiting",
-	3: "Exited",
+	1: "Idle",
+	2: "Running",
+	3: "Error",
+	4: "Exiting",
+	5: "Exited",
 }
+
+# State icons for visual distinction
+const STATE_ICONS := {
+	0: "⏳",  # SPAWNING
+	1: "💤",  # IDLE
+	2: "▶️",  # RUNNING
+	3: "⚠️",  # ERROR
+	4: "⏹️",  # EXITING
+	5: "⬛",  # EXITED
+}
+
+## AgentState enum values (must match AgentOrchestrator.AgentState)
+const AS_SPAWNING := 0
+const AS_IDLE := 1
+const AS_RUNNING := 2
+const AS_ERROR := 3
+const AS_EXITING := 4
+const AS_EXITED := 5
 
 ## Refresh interval in seconds
 const REFRESH_INTERVAL := 1.0
@@ -301,7 +323,8 @@ void fragment() {
 
 	var state_label := Label.new()
 	state_label.name = "StateLabel"
-	state_label.text = STATE_NAMES.get(session.state, "Unknown")
+	var state_icon: String = STATE_ICONS.get(session.state, "❓")
+	state_label.text = "%s %s" % [state_icon, STATE_NAMES.get(session.state, "Unknown")]
 	state_label.add_theme_font_size_override("font_size", 11)
 	state_label.add_theme_color_override("font_color", STATE_COLORS.get(session.state, Color.GRAY))
 	status_row.add_child(state_label)
@@ -328,7 +351,7 @@ void fragment() {
 	_style_small_action_button(focus_button)
 	focus_button.pressed.connect(_on_agent_focus_pressed.bind(session.agent_id))
 	# Disable focus if agent is exited or no terminal panel exists
-	focus_button.disabled = session.state == 3  # EXITED
+	focus_button.disabled = session.state == AS_EXITED
 	actions_container.add_child(focus_button)
 
 	# Restart/Stop row
@@ -353,7 +376,7 @@ void fragment() {
 	kill_button.custom_minimum_size = Vector2(48, 36)
 	_style_small_danger_button(kill_button)
 	kill_button.pressed.connect(_on_agent_kill_pressed.bind(session.agent_id))
-	kill_button.disabled = session.state == 3  # EXITED
+	kill_button.disabled = session.state == AS_EXITED
 	action_row.add_child(kill_button)
 
 	return item
@@ -489,16 +512,16 @@ func _refresh_agent_list() -> void:
 
 	# Update button states
 	var has_running := _agent_orchestrator.get_running_count() > 0
-	var has_exited := _agent_orchestrator.get_sessions_by_state(3).size() > 0  # EXITED = 3
+	var has_exited := _agent_orchestrator.get_sessions_by_state(AS_EXITED).size() > 0  # EXITED = 3
 	_kill_all_button.disabled = not has_running
 	_cleanup_button.disabled = not has_exited
 
 
 func _sort_sessions(a, b) -> bool:
 	# Running agents first
-	if a.state == 1 and b.state != 1:  # RUNNING = 1
+	if a.state == AS_RUNNING and b.state != AS_RUNNING:  # RUNNING = 1
 		return true
-	if b.state == 1 and a.state != 1:
+	if b.state == AS_RUNNING and a.state != AS_RUNNING:
 		return false
 	# Then by creation time (newest first)
 	return a.created_at > b.created_at
@@ -523,18 +546,19 @@ func _update_agent_item(agent_id: String) -> void:
 			# Update state label
 			var state_label := child.get_node_or_null("Content/InfoContainer/StatusRow/StateLabel")
 			if state_label:
-				state_label.text = STATE_NAMES.get(session.state, "Unknown")
+				var icon: String = STATE_ICONS.get(session.state, "❓")
+				state_label.text = "%s %s" % [icon, STATE_NAMES.get(session.state, "Unknown")]
 				state_label.add_theme_color_override("font_color", STATE_COLORS.get(session.state, Color.GRAY))
 
 			# Update focus button
 			var focus_button := child.get_node_or_null("Content/ActionsContainer/FocusButton")
 			if focus_button:
-				focus_button.disabled = session.state == 3  # EXITED
+				focus_button.disabled = session.state == AS_EXITED
 
 			# Update kill button
 			var kill_button := child.get_node_or_null("Content/ActionsContainer/HBoxContainer/KillButton")
 			if kill_button:
-				kill_button.disabled = session.state == 3  # EXITED
+				kill_button.disabled = session.state == AS_EXITED
 
 			break
 
@@ -551,7 +575,7 @@ func _on_agent_state_changed(agent_id: String, _old_state: int, _new_state: int)
 	_update_agent_item(agent_id)
 	# Also update button states
 	var has_running := _agent_orchestrator.get_running_count() > 0
-	var has_exited := _agent_orchestrator.get_sessions_by_state(3).size() > 0
+	var has_exited := _agent_orchestrator.get_sessions_by_state(AS_EXITED).size() > 0
 	_kill_all_button.disabled = not has_running
 	_cleanup_button.disabled = not has_exited
 
