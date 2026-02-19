@@ -648,8 +648,12 @@ func _on_spawn_button_pressed() -> void:
 		_show_error("Please select a project path")
 		return
 
-	# Validate path exists
-	if not DirAccess.dir_exists_absolute(_selected_path):
+	# Validate path exists locally, but skip check when using a remote bridge
+	# (the project directory lives on the remote PC, not on this device)
+	var bridge_client := get_node_or_null("/root/BridgeClient")
+	var is_remote: bool = bridge_client and bridge_client.is_remote_connection()
+
+	if not is_remote and not DirAccess.dir_exists_absolute(_selected_path):
 		_show_error("Directory does not exist: " + _selected_path)
 		return
 
