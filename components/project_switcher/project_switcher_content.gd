@@ -521,5 +521,7 @@ func show_warning(message: String) -> void:
 	# Reset after delay
 	var timer := get_tree().create_timer(3.0)
 	await timer.timeout
+	if not is_instance_valid(self) or not _status_label:
+		return
 	_status_label.add_theme_color_override("font_color", THEME_TEXT_SECONDARY)
 	_update_status()

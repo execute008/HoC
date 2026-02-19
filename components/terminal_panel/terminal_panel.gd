@@ -540,7 +540,12 @@ func _queue_write(text: String) -> void:
 		return
 
 	await get_tree().process_frame
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
+
 	await get_tree().process_frame
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 
 	if _terminal_content:
 		_terminal_content.write(text)

@@ -544,7 +544,7 @@ func _show_message(text: String, color: Color) -> void:
 		# Clear message after delay
 		var timer := get_tree().create_timer(5.0)
 		await timer.timeout
-		if _message_label:
+		if is_instance_valid(self) and _message_label:
 			_message_label.text = ""
 
 

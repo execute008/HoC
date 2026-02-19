@@ -153,6 +153,9 @@ func _setup_panel() -> void:
 func _create_viewport_container() -> void:
 	# Load and instantiate the viewport 2D in 3D scene
 	var viewport_scene = load("res://addons/godot-xr-tools/objects/viewport_2d_in_3d.tscn")
+	if not viewport_scene:
+		push_error("WorkspacePanel: Failed to load viewport_2d_in_3d.tscn — is godot-xr-tools installed?")
+		return
 	_viewport_container = viewport_scene.instantiate()
 	_viewport_container.name = "ViewportContainer"
 
