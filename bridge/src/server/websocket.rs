@@ -208,13 +208,12 @@ async fn handle_connection(
                         debug!("Received message from {}: {}", peer_addr, text);
 
                         match handle_message(&text, &agent_manager).await {
-                            Ok(response) => {
-                                // Don't send dummy pong responses for input
-                                if let ServerMessage::Pong { seq: 0 } = response {
-                                    continue;
-                                }
+                            Ok(Some(response)) => {
                                 let response_json = serde_json::to_string(&response)?;
                                 ws_sender.send(Message::Text(response_json)).await?;
+                            }
+                            Ok(None) => {
+                                // No response needed (e.g., agent input forwarded successfully)
                             }
                             Err(e) => {
                                 let error_msg = ServerMessage::error_with_code(
@@ -296,23 +295,23 @@ async fn handle_connection(
     Ok(())
 }
 
-/// Handle a client message and return a response
-async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Result<ServerMessage> {
+/// Handle a client message and return an optional response
+///
+/// Returns `Ok(None)` when no response is needed (e.g., agent input).
+async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Result<Option<ServerMessage>> {
     let message: ClientMessage = serde_json::from_str(text)?;
 
     match message {
         ClientMessage::Authenticate { .. } => {
-            // Authentication message received after connection is established
-            // This shouldn't happen in normal flow - auth is handled during connection setup
             warn!("Received unexpected Authenticate message after connection established");
-            Ok(ServerMessage::error_with_code(
+            Ok(Some(ServerMessage::error_with_code(
                 "Already authenticated",
                 ErrorCode::InvalidMessage,
-            ))
+            )))
         }
         ClientMessage::Ping { seq } => {
             debug!("Received ping with seq {}", seq);
-            Ok(ServerMessage::Pong { seq })
+            Ok(Some(ServerMessage::Pong { seq }))
         }
         ClientMessage::SpawnAgent {
             project_path,
@@ -328,16 +327,16 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
             // Validate project path exists
             let path = Path::new(&project_path);
             if !path.exists() {
-                return Ok(ServerMessage::error_with_code(
+                return Ok(Some(ServerMessage::error_with_code(
                     format!("Project path does not exist: {}", project_path),
                     ErrorCode::InvalidPath,
-                ));
+                )));
             }
             if !path.is_dir() {
-                return Ok(ServerMessage::error_with_code(
+                return Ok(Some(ServerMessage::error_with_code(
                     format!("Project path is not a directory: {}", project_path),
                     ErrorCode::InvalidPath,
-                ));
+                )));
             }
 
             // Load project config to get preset settings
@@ -353,7 +352,6 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
             if let Some(preset_name) = &preset {
                 spawn_config = spawn_config.with_preset(preset_name.clone());
 
-                // Look up preset in project config
                 if let Some(preset_config) = project_config.get_preset(preset_name) {
                     if !preset_config.args.is_empty() {
                         spawn_config = spawn_config.with_args(preset_config.args.clone());
@@ -363,7 +361,6 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
                     }
                 }
             } else if let Some(default_preset) = project_config.default_preset() {
-                // Use default preset if no preset specified
                 spawn_config = spawn_config.with_preset(&default_preset.name);
                 if !default_preset.args.is_empty() {
                     spawn_config = spawn_config.with_args(default_preset.args.clone());
@@ -373,23 +370,22 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
                 }
             }
 
-            // Spawn the agent
             match agent_manager.spawn_agent(spawn_config).await {
                 Ok(agent_id) => {
                     info!("Agent spawned: {} for project {}", agent_id, project_path);
-                    Ok(ServerMessage::agent_spawned(
+                    Ok(Some(ServerMessage::agent_spawned(
                         agent_id,
                         project_path,
                         cols.unwrap_or(DEFAULT_TERMINAL_COLS),
                         rows.unwrap_or(DEFAULT_TERMINAL_ROWS),
-                    ))
+                    )))
                 }
                 Err(e) => {
                     error!("Failed to spawn agent: {}", e);
-                    Ok(ServerMessage::error_with_code(
+                    Ok(Some(ServerMessage::error_with_code(
                         format!("Failed to spawn agent: {}", e),
                         ErrorCode::SpawnFailed,
-                    ))
+                    )))
                 }
             }
         }
@@ -400,22 +396,17 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
                 input.len()
             );
             match agent_manager.send_input(agent_id, &input).await {
-                Ok(()) => {
-                    // No response needed for successful input
-                    // The output will be sent via the event stream
-                    Ok(ServerMessage::Pong { seq: 0 }) // Dummy response
-                }
-                Err(e) => Ok(ServerMessage::agent_error(
+                Ok(()) => Ok(None),
+                Err(e) => Ok(Some(ServerMessage::agent_error(
                     agent_id,
                     format!("Failed to send input: {}", e),
                     ErrorCode::InternalError,
-                )),
+                ))),
             }
         }
         ClientMessage::KillAgent { agent_id, signal, .. } => {
             // Note: `signal` is accepted by the protocol but not forwarded to the PTY layer
             // because portable-pty only supports kill(), not arbitrary signal delivery.
-            // The parameter is retained for future use if we switch to a native PTY backend.
             if signal.is_some() {
                 debug!("KillAgent request: agent={} (signal={:?} ignored, using kill)", agent_id, signal);
             } else {
@@ -424,13 +415,13 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
             match agent_manager.kill_agent(agent_id).await {
                 Ok(()) => {
                     info!("Agent killed: {}", agent_id);
-                    Ok(ServerMessage::agent_exited(agent_id, None))
+                    Ok(Some(ServerMessage::agent_exited(agent_id, None)))
                 }
-                Err(e) => Ok(ServerMessage::agent_error(
+                Err(e) => Ok(Some(ServerMessage::agent_error(
                     agent_id,
                     format!("Failed to kill agent: {}", e),
                     ErrorCode::InternalError,
-                )),
+                ))),
             }
         }
         ClientMessage::ResizeTerminal {
@@ -443,38 +434,38 @@ async fn handle_message(text: &str, agent_manager: &AgentManager) -> anyhow::Res
                 agent_id, cols, rows
             );
             match agent_manager.resize_agent(agent_id, cols, rows).await {
-                Ok(()) => Ok(ServerMessage::AgentResized {
+                Ok(()) => Ok(Some(ServerMessage::AgentResized {
                     agent_id,
                     cols,
                     rows,
-                }),
-                Err(e) => Ok(ServerMessage::agent_error(
+                })),
+                Err(e) => Ok(Some(ServerMessage::agent_error(
                     agent_id,
                     format!("Failed to resize terminal: {}", e),
                     ErrorCode::InternalError,
-                )),
+                ))),
             }
         }
         ClientMessage::ListAgents => {
             debug!("ListAgents request");
             let agents = agent_manager.list_agents().await;
-            Ok(ServerMessage::AgentList { agents })
+            Ok(Some(ServerMessage::AgentList { agents }))
         }
         ClientMessage::GetAgentStatus { agent_id } => {
             debug!("GetAgentStatus request: agent={}", agent_id);
             match agent_manager.get_agent_status(agent_id).await {
-                Ok(info) => Ok(ServerMessage::AgentStatus {
+                Ok(info) => Ok(Some(ServerMessage::AgentStatus {
                     agent_id: info.agent_id,
                     status: info.status,
                     project_path: info.project_path,
                     cols: info.cols,
                     rows: info.rows,
-                }),
-                Err(_) => Ok(ServerMessage::agent_error(
+                })),
+                Err(_) => Ok(Some(ServerMessage::agent_error(
                     agent_id,
                     "Agent not found",
                     ErrorCode::AgentNotFound,
-                )),
+                ))),
             }
         }
     }
@@ -550,8 +541,8 @@ mod tests {
         let response = handle_message(msg, &agent_manager).await.unwrap();
 
         match response {
-            ServerMessage::Pong { seq } => assert_eq!(seq, 42),
-            _ => panic!("Expected Pong response"),
+            Some(ServerMessage::Pong { seq }) => assert_eq!(seq, 42),
+            _ => panic!("Expected Some(Pong) response"),
         }
     }
 }
