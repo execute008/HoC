@@ -118,12 +118,6 @@ func _ready() -> void:
 	# Get reference to terminal content after setup
 	_connect_terminal_content()
 
-
-func _exit_tree() -> void:
-	# Clean up agent binding to prevent dangling callbacks
-	if _bound_agent_id != "":
-		unbind_agent()
-
 	if not Engine.is_editor_hint():
 		_find_controllers()
 		_connect_agent_orchestrator()
@@ -140,6 +134,12 @@ func _exit_tree() -> void:
 		# Connect to panel interaction signals for focus handling
 		grabbed.connect(_on_panel_grabbed)
 		released.connect(_on_panel_released)
+
+
+func _exit_tree() -> void:
+	# Clean up agent binding to prevent dangling callbacks
+	if _bound_agent_id != "":
+		unbind_agent()
 
 
 func _process(delta: float) -> void:
